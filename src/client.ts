@@ -53,6 +53,10 @@ export class GambotClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.token}`,
       Accept: "application/json",
+      // Identify the caller as the MCP server so the backend labels sent messages
+      // "Gambot MCP" (vs "Gambot API" for direct REST callers) in the chat.
+      "X-Gambot-Client": "mcp",
+      "User-Agent": "gambot-mcp",
     };
     const init: RequestInit = { method, headers };
     if (opts.body !== undefined && method !== "GET") {

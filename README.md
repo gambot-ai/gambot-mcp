@@ -87,7 +87,7 @@ The Gambot Token is a secret (like a password). Keep it out of source control (u
 
 ## Publishing (maintainers)
 
-This package ships with a [`server.json`](./server.json) manifest for the **official MCP Registry** (`registry.modelcontextprotocol.io`). The registry only stores metadata, so the npm package must be published first, and the reverse‑DNS `name` in `server.json` must match `mcpName` in `package.json` (`io.github.gambot/gambot-mcp`).
+This package ships with a [`server.json`](./server.json) manifest for the **official MCP Registry** (`registry.modelcontextprotocol.io`). The registry only stores metadata, so the npm package must be published first, and the reverse‑DNS `name` in `server.json` must match `mcpName` in `package.json` (`io.github.gambot-ai/gambot-mcp`).
 
 ```bash
 # 1) Publish the npm package (public)
@@ -97,12 +97,12 @@ npm publish --access public
 #    (see https://modelcontextprotocol.io/registry/quickstart)
 brew install mcp-publisher            # or download from the registry releases
 
-# 3) Authenticate under the io.github.gambot/* namespace and publish
+# 3) Authenticate under the io.github.gambot-ai/* namespace and publish
 mcp-publisher login github
 mcp-publisher publish
 ```
 
-> If your GitHub owner is not `gambot`, update the `name` in `server.json`, `mcpName` in
+> If your GitHub owner is not `gambot-ai`, update the `name` in `server.json`, `mcpName` in
 > `package.json`, and the `repository`/`identifier` fields to match before publishing.
 
 Once listed in the official registry, aggregators such as **Glama**, **PulseMCP** and **Smithery**
