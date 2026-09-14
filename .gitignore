@@ -4,3 +4,6 @@ dist/
 .env
 .env.*
 .DS_Store
+
+# local publisher binaries
+.tools/
