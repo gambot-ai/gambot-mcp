@@ -5,7 +5,8 @@
   "mcpName": "io.github.gambot-ai/gambot-mcp",
   "type": "module",
   "bin": {
-    "gambot-mcp": "dist/index.js"
+    "gambot-mcp": "dist/index.js",
+    "gambot-mcp-http": "dist/http.js"
   },
   "main": "dist/index.js",
   "files": [
@@ -14,6 +15,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:http": "node dist/http.js",
     "dev": "tsc --watch",
     "prepare": "tsc"
   },
@@ -49,9 +51,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^5.2.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^20.14.0",
     "typescript": "^5.5.0"
   }
