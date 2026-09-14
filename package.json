@@ -1,0 +1,58 @@
+{
+  "name": "gambot-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) server for the Gambot WhatsApp Business API — send messages & templates, manage contacts, leads, cases, tasks, quotes, invoices, orders, forms, signatures, documents, campaigns and users.",
+  "mcpName": "io.github.gambot/gambot-mcp",
+  "type": "module",
+  "bin": {
+    "gambot-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "prepare": "tsc"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "gambot",
+    "whatsapp",
+    "whatsapp-api",
+    "whatsapp-business-api",
+    "whatsapp-mcp",
+    "whatsapp-cloud-api",
+    "crm",
+    "ai-agent",
+    "claude",
+    "chatgpt",
+    "gemini",
+    "cursor"
+  ],
+  "homepage": "https://gambot.co.il/developers/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gambot/gambot-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gambot/gambot-mcp/issues"
+  },
+  "author": "Gambot (https://gambot.co.il)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}

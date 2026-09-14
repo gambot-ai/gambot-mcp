@@ -1,0 +1,26 @@
+# Smithery configuration for the Gambot WhatsApp MCP server.
+# https://smithery.ai/docs
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - gambotToken
+    properties:
+      gambotToken:
+        type: string
+        title: Gambot Token
+        description: Your Gambot Token (gmbt_…) from Gambot Settings → General.
+      gambotApiBase:
+        type: string
+        title: API Base URL
+        description: Optional override for the API base URL (defaults to https://api.gambot.co.il/api/v1).
+  commandFunction: |-
+    (config) => ({
+      command: 'node',
+      args: ['dist/index.js'],
+      env: {
+        GAMBOT_TOKEN: config.gambotToken,
+        ...(config.gambotApiBase ? { GAMBOT_API_BASE: config.gambotApiBase } : {})
+      }
+    })
