@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "Gambot WhatsApp Business API",
+  "version": "1.0.0",
+  "description": "Send WhatsApp messages & templates and manage CRM, contacts, leads, cases, tasks, quotes, invoices, orders, forms, e-signatures, documents & campaigns via the Gambot WhatsApp Business API — from Claude, Cursor & any AI agent.",
+  "author": {
+    "name": "Gambot",
+    "email": "info@gambot.co.il",
+    "url": "https://gambot.co.il"
+  },
+  "homepage": "https://gambot.co.il/developers/",
+  "repository": "https://github.com/gambot-ai/gambot-mcp",
+  "license": "MIT",
+  "keywords": ["whatsapp", "whatsapp-api", "whatsapp-business-api", "mcp", "crm", "claude", "cursor", "ai-agent", "messaging"]
+}
