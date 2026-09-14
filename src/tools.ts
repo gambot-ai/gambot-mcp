@@ -18,7 +18,8 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_send_text",
     title: "Send WhatsApp text",
     description:
-      "Send a free-text WhatsApp message. Only works inside the 24-hour customer service window; outside it, use gambot_send_template.",
+      "Send a free-text WhatsApp message to ONE recipient. Only works inside the 24-hour customer service window; outside it, use gambot_send_template. " +
+      "IMPORTANT — this is for a single person only. If the user wants to message MULTIPLE recipients, a list, a spreadsheet/Excel/CSV, a CRM segment, or says things like 'send to everyone / to all my contacts / to this list', DO NOT call this tool in a loop. Use a campaign instead: gambot_send_campaign_from_excel (for a sheet), gambot_send_campaign (ad-hoc list/segment), or gambot_create_campaign (to save/schedule). Campaigns handle rate-limits, per-recipient variables, opt-out/consent and reporting.",
     inputSchema: {
       to: phone,
       text: z.string().describe("Message body"),
@@ -30,7 +31,8 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_send_template",
     title: "Send WhatsApp template",
     description:
-      "Send an approved WhatsApp template with variables. Can initiate a conversation even outside the 24-hour window.",
+      "Send an approved WhatsApp template with variables to ONE recipient. Can initiate a conversation even outside the 24-hour window. " +
+      "IMPORTANT — single recipient only. For a BULK/broadcast send (multiple numbers, an Excel/CSV/spreadsheet the user uploaded, a CRM segment, or 'send to everyone / all contacts / this list'), DO NOT loop this tool. Use a campaign: gambot_send_campaign_from_excel (read the sheet and map columns → template variables), gambot_send_campaign (ad-hoc list/segment, no save), or gambot_create_campaign (save and/or schedule once/recurring). Campaigns manage throughput, per-row variables, opt-out/consent and delivery reports.",
     inputSchema: {
       to: phone,
       templateId: z.string().describe("Template id/name"),
@@ -969,6 +971,118 @@ export const TOOLS: GambotTool[] = [
       if (a.fromNumberId) payload.fromNumberId = a.fromNumberId;
       return c.post("/campaigns/send", payload);
     },
+  },
+
+  // ── Bots / Automations ───────────────────────────────────────────────────────
+  {
+    name: "gambot_list_bots",
+    title: "List bots",
+    description: "List the organization's bots & chat automations (botomations). Pass botsOnly=true to return only visual menu/AI bots.",
+    inputSchema: { botsOnly: z.boolean().optional() },
+    run: (c, a) => c.get("/bots", { botsOnly: a.botsOnly }),
+  },
+  {
+    name: "gambot_get_bot",
+    title: "Get bot",
+    description: "Get a single bot/automation with its full step definition (trigger + actions).",
+    inputSchema: { botId: z.string() },
+    run: (c, a) => c.get(`/bots/${encodeURIComponent(a.botId)}`),
+  },
+  {
+    name: "gambot_create_keyword_autoreply",
+    title: "Create keyword auto-reply bot",
+    description:
+      "Create a bot that automatically replies to an incoming WhatsApp message. Trigger on specific keyword(s) " +
+      "(matchType 'equals' or 'contains') or on ANY incoming message (anyMessage=true). The reply is an approved " +
+      "template (replyTemplateName) or free text (replyText — only delivers inside the 24h service window).",
+    inputSchema: {
+      name: z.string().describe("Internal bot name."),
+      keywords: z.array(z.string()).optional().describe("Keyword(s) that trigger the reply. Omit and set anyMessage=true to catch everything."),
+      matchType: z.enum(["equals", "contains"]).optional().describe("How to match keywords. Default 'equals'."),
+      anyMessage: z.boolean().optional().describe("Reply to ANY incoming message (ignores keywords)."),
+      replyTemplateName: z.string().optional().describe("Approved template to send as the reply."),
+      replyText: z.string().optional().describe("Free-text reply (used when no template is given)."),
+      status: z.enum(["active", "inactive"]).optional().describe("Default active."),
+    },
+    run: (c, a) => c.post("/bots/keyword-reply", a),
+  },
+  {
+    name: "gambot_create_template_button_autoreply",
+    title: "Create auto-reply on template button click",
+    description:
+      "Create a bot that reacts when a contact taps a quick-reply BUTTON on a template you sent (e.g. after a campaign). " +
+      "For each button give the reply (template or text) — perfect for 'when they click X, send Y'. " +
+      "The button title must match the template's button exactly.",
+    inputSchema: {
+      name: z.string(),
+      templateName: z.string().describe("The template whose buttons are being clicked."),
+      buttons: z
+        .array(
+          z.object({
+            button: z.string().describe("The button title exactly as on the template."),
+            replyTemplateName: z.string().optional(),
+            replyText: z.string().optional(),
+          })
+        )
+        .describe("One entry per button to handle."),
+      status: z.enum(["active", "inactive"]).optional(),
+    },
+    run: (c, a) => c.post("/bots/template-button-reply", a),
+  },
+  {
+    name: "gambot_create_menu_bot",
+    title: "Create menu bot",
+    description:
+      "Create a menu bot: an opening template with quick-reply buttons that route each tap to a reply. " +
+      "Provide openingTemplateName and options (each button + its reply template/text). " +
+      "Start the menu for a contact by sending the opening template (e.g. via a campaign).",
+    inputSchema: {
+      name: z.string(),
+      openingTemplateName: z.string().describe("Template that shows the menu buttons."),
+      options: z
+        .array(
+          z.object({
+            button: z.string().describe("Button title on the opening template."),
+            replyTemplateName: z.string().optional(),
+            replyText: z.string().optional(),
+          })
+        )
+        .describe("One entry per menu option."),
+      status: z.enum(["active", "inactive"]).optional(),
+    },
+    run: (c, a) => c.post("/bots/menu", a),
+  },
+  {
+    name: "gambot_set_bot_status",
+    title: "Activate / deactivate bot",
+    description: "Turn a bot on (active) or off (inactive).",
+    inputSchema: { botId: z.string(), status: z.enum(["active", "inactive"]) },
+    run: (c, a) => c.post(`/bots/${encodeURIComponent(a.botId)}/status`, { status: a.status }),
+  },
+  {
+    name: "gambot_delete_bot",
+    title: "Delete bot",
+    description: "Delete a bot/automation by id.",
+    inputSchema: { botId: z.string() },
+    run: (c, a) => c.del(`/bots/${encodeURIComponent(a.botId)}`),
+  },
+  {
+    name: "gambot_create_bot",
+    title: "Create bot (advanced, full step schema)",
+    description:
+      "Advanced: create a bot from a full botomation object when the high-level builders aren't enough. " +
+      "steps[]: step 1 is the trigger (action 'IncomingMessage', …), the rest are actions ('SendMessage','switchCase'," +
+      "'Condition','GambotAi','Delay','GambotAction',…). Use {{Step_1_PhoneNumber}} / {{Step_1_Message}} placeholders. " +
+      "Prefer gambot_create_keyword_autoreply / _template_button_autoreply / _menu_bot for common cases.",
+    inputSchema: {
+      name: z.string(),
+      steps: z
+        .array(z.record(z.any()))
+        .describe("Ordered steps; step 1 is the trigger. Each: { StepId, type:'trigger'|'action', action, config }."),
+      isBot: z.boolean().optional(),
+      status: z.enum(["active", "inactive"]).optional(),
+    },
+    run: (c, a) => c.post("/bots", a),
   },
 
   // ── Onboarding (create account / payment / connect WhatsApp) ─────────────────
