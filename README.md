@@ -1,6 +1,12 @@
 # Gambot MCP Server — WhatsApp API for AI agents
 
+[![npm](https://img.shields.io/npm/v/gambot-mcp)](https://www.npmjs.com/package/gambot-mcp)
+[![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
 Connect **WhatsApp** to **Claude, ChatGPT, Gemini and Cursor**. This is a [Model Context Protocol](https://modelcontextprotocol.io) server for the **Gambot WhatsApp Business API** (an official, Meta‑approved WhatsApp Business Solution Provider). It lets any MCP‑compatible client drive your Gambot account through tools — send WhatsApp messages & templates, run marketing campaigns, and manage contacts, leads, cases, tasks, quotes, invoices, orders, forms, signatures, document templates and users.
+
+**One-click install (Cursor):** [➕ Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=gambot&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImdhbWJvdC1tY3AiXSwiZW52Ijp7IkdBTUJPVF9UT0tFTiI6IiJ9fQ==) — then paste your Gambot token into the server's `env`.
 
 It wraps the public REST API at `https://api.gambot.co.il/api/v1`, authenticated with your organization's **Gambot Token**.
 
