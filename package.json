@@ -1,6 +1,6 @@
 {
   "name": "gambot-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Model Context Protocol (MCP) server for the Gambot WhatsApp Business API — send messages & templates, manage contacts, leads, cases, tasks, quotes, invoices, orders, forms, signatures, documents, campaigns and users.",
   "mcpName": "io.github.gambot-ai/gambot-mcp",
   "type": "module",
