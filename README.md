@@ -8,7 +8,18 @@ Connect **WhatsApp** to **Claude, ChatGPT, Gemini and Cursor**. This is a [Model
 
 **One-click install (Cursor):** [➕ Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=gambot&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImdhbWJvdC1tY3AiXSwiZW52Ijp7IkdBTUJPVF9UT0tFTiI6IiJ9fQ==) — then paste your Gambot token into the server's `env`.
 
-It wraps the public REST API at `https://api.gambot.co.il/api/v1`, authenticated with your organization's **Gambot Token**.
+It wraps the public REST API at `https://api.gambot.co.il/api/v1`, authenticated with your organization's **Gambot Token**. MCP is an AI‑facing **interface** over Gambot — it uses the same business logic as the REST API, and is **not** a separate backend.
+
+## Supported AI clients
+
+Step‑by‑step setup guides per client:
+
+- **Cursor** — one‑click install or `.cursor/mcp.json` → https://gambot.co.il/whatsapp-mcp/cursor/
+- **Claude** — Claude Desktop (npx) or a remote connector → https://gambot.co.il/whatsapp-mcp/claude/
+- **ChatGPT** — hosted connector (Streamable HTTP + OAuth) → https://gambot.co.il/whatsapp-mcp/chatgpt/
+- **Gemini** — Gemini CLI settings → https://gambot.co.il/whatsapp-mcp/gemini/
+
+**Hosted (remote) server:** `https://gambot-mcp.azurewebsites.net/mcp` (Streamable HTTP; OAuth or bearer token) — no local install needed.
 
 ## Prerequisites
 
@@ -65,12 +76,14 @@ Then point your MCP client at the built entrypoint:
 | Group | Tools |
 |-------|-------|
 | Messages | `gambot_send_text`, `gambot_send_template` |
-| Conversations | `gambot_list_conversations`, `gambot_get_conversation_messages` |
+| Conversations | `gambot_list_conversations` (the conversation/contact LIST — who, with last-message metadata only), `gambot_get_conversation_messages` (full message history of ONE conversation), `gambot_analytics_transcript` (message CONTENT across ALL conversations for a period — for "how did my team reply today / which customers were upset"), `gambot_check_window` (is the 24h window open? → free text vs template), `gambot_list_numbers` (sender numbers for multi-number orgs) |
 | Templates | `gambot_list_templates`, `gambot_get_template`, `gambot_get_template_variables`, `gambot_create_template` (text/media header, body variables, footer, buttons), `gambot_upload_template_media` |
-| Contacts | `gambot_get_contact_fields`, `gambot_create_contact`, `gambot_get_contact`, `gambot_update_contact` (base + `customFields`) |
+| Contacts | `gambot_get_contact_fields`, `gambot_create_contact`, `gambot_list_contacts` (list/search the whole contacts directory — by name/phone/email, tag, conversation status/category or owner), `gambot_get_contact`, `gambot_update_contact` (base + `customFields`), `gambot_list_ctwa_contacts` (contacts created from a Click-to-WhatsApp ad, with the originating ad info) |
 | Leads | `gambot_get_lead_fields`, `gambot_create_lead`, `gambot_list_leads`, `gambot_get_lead`, `gambot_update_lead` (all base fields + `customFields`) |
 | Cases | `gambot_get_case_fields`, `gambot_create_case`, `gambot_list_cases`, `gambot_get_case`, `gambot_update_case` (base + `customFields`) |
 | Tasks | `gambot_create_task`, `gambot_list_tasks`, `gambot_get_task`, `gambot_update_task` |
+| Notes | `gambot_list_notes` (read/search the notes across contacts, leads & cases — the in-app "Notes Hub"; filter by source/date/author/text), `gambot_get_entity_notes` (notes for one contact/lead/case) |
+| Analytics / reports | `gambot_analytics_summary` (one-shot KPI snapshot: messages, contacts, leads, tickets, tasks, bots), `gambot_analytics_messages`, `gambot_analytics_overview` (lifetime + 6-month trend), `gambot_analytics_daily_conversations` (daily time series), `gambot_analytics_contacts`, `gambot_analytics_leads`, `gambot_analytics_cases`, `gambot_analytics_tasks`, `gambot_analytics_ctwa`, `gambot_analytics_bots` (bot/automation run performance + per-bot breakdown) |
 | Quotes | `gambot_create_quote`, `gambot_list_quotes`, `gambot_get_quote`, `gambot_update_quote` |
 | Invoices | `gambot_create_invoice`, `gambot_list_invoices`, `gambot_get_invoice`, `gambot_update_invoice`, `gambot_issue_invoice` |
 | Orders | `gambot_create_order`, `gambot_list_orders`, `gambot_get_order`, `gambot_update_order` |
@@ -78,8 +91,44 @@ Then point your MCP client at the built entrypoint:
 | Web forms | `gambot_list_forms`, `gambot_get_form`, `gambot_get_form_link` (public link to distribute), `gambot_get_form_submissions` |
 | Document templates | `gambot_list_documents`, `gambot_get_document`, `gambot_create_document_link` (distributable fill link), `gambot_get_document_submissions` |
 | Users | `gambot_create_user`, `gambot_list_users`, `gambot_get_user`, `gambot_update_user`, `gambot_enable_user`, `gambot_disable_user` |
-| Campaigns | `gambot_list_campaigns`, `gambot_list_scheduled_campaigns`, `gambot_get_campaign`, `gambot_get_campaign_results`, `gambot_create_campaign` (manual/scheduled/recurring; Excel or CRM-filter audience), `gambot_send_campaign_from_excel` (mail-merge blast from a sheet the user gave you — pass rows + phoneColumn + column→variable mapping; sends now or scheduled), `gambot_update_campaign`, `gambot_delete_campaign`, `gambot_run_campaign`, `gambot_send_campaign` (ad-hoc), `gambot_test_campaign` (single recipient). **Compliance is built in:** every org has an ACTIVE opt-out flow (recipients reply `הסר`/`stop`/`unsubscribe` → excluded from future broadcasts); send/run responses echo it under `optOut` (enabled by default) and your consent under `consent`. Assert consent-to-mail via `consentConfirmed` (defaults to true). |
+| Campaigns | `gambot_list_campaigns`, `gambot_list_scheduled_campaigns`, `gambot_get_campaign`, `gambot_get_campaign_results`, `gambot_create_campaign` (SAVED campaign — use for ANY scheduled send (once/recurring is always a campaign) or a reusable CRM-segment broadcast), `gambot_send_campaign_from_excel` (mail-merge blast from a sheet the user gave you — pass rows + phoneColumn + column→variable mapping; **an Excel broadcast is always saved as a campaign** — immediate = save + run now, scheduled = save + scheduler runs it), `gambot_update_campaign`, `gambot_delete_campaign`, `gambot_run_campaign`, `gambot_send_campaign` (immediate "run to a group": ad-hoc, unsaved send to a tag/segment/phone list), `gambot_test_campaign` (single recipient). **Decision rule:** group-run = immediate & unsaved (`gambot_send_campaign`); scheduled (once/recurring) = always a campaign (`gambot_create_campaign`); one-time Excel = always a campaign (`gambot_send_campaign_from_excel`). Prefer a **template** for broadcasts — a `regular` free-text broadcast only reaches recipients whose 24h window is open. **Compliance is built in:** every org has an ACTIVE opt-out flow (recipients reply `הסר`/`stop`/`unsubscribe` → excluded from future broadcasts); send/run responses echo it under `optOut` (enabled by default) and your consent under `consent`. |
 | Onboarding | `gambot_check_organization`, `gambot_generate_organization_name`, `gambot_search_available_numbers` (buy a number by country), `gambot_create_trial_account` (free trial; free/coexistence/BYO/buy-a-SIM), `gambot_create_paid_account` (no trial, card required), `gambot_add_payment_method` (card on file), `gambot_create_payment_link` (Tranzila hosted), `gambot_get_waba_connect_link`, `gambot_exchange_waba_token` (complete Meta Embedded Signup) |
+
+## Example prompts
+
+- "Send a WhatsApp to +972 50‑123‑4567 saying their order shipped."
+- "Message everyone tagged `VIP` with the `promo_launch` template."
+- "How many WhatsApp messages did we receive today, and how many are waiting for a reply?"
+- "Summarize today's customer‑service conversations."
+- "Schedule a campaign to the `newsletter` tag for tomorrow at 10:00."
+
+## Agent behavior, errors & recovery
+
+Gambot MCP is designed so an AI agent can **understand what happened and what to do next** — it interprets the API's structured business state and returns actionable guidance.
+
+- **Structured errors.** On an API error the tool result is JSON with a stable machine‑readable `code`, the human `message`, the API's `data` (state flags), and — when recoverable — a `recommendedAction` naming a **real tool**. Example:
+
+  ```json
+  {
+    "status": "action_required",
+    "code": "CONVERSATION_WINDOW_CLOSED",
+    "message": "A free-form WhatsApp message cannot currently be sent.",
+    "data": { "canSendFreeText": false, "canSendTemplate": true },
+    "recommendedAction": {
+      "tool": "gambot_send_template",
+      "reason": "The 24-hour window is closed; send an approved template. List options with gambot_list_templates."
+    }
+  }
+  ```
+
+- **Common recoveries.** `CONVERSATION_WINDOW_CLOSED` / `TEMPLATE_REQUIRED` → `gambot_send_template`; `MISSING_TEMPLATE_VARIABLES` → `gambot_get_template_variables` (then ask the user); `CONTACT_NOT_FOUND` → `gambot_list_contacts` (never guess a recipient); `RATE_LIMITED` / messaging‑limit → back off, don't loop, use a campaign for bulk.
+- **Safety.** The agent never silently picks an ambiguous recipient, and never loops single‑send tools for bulk — it's routed to campaigns.
+- **Tool annotations.** Read tools are marked read‑only/idempotent; `delete_*`, `disable_user` and `issue_invoice` are marked destructive; every tool is `openWorld` (it talks to the live WhatsApp/Gambot backend). Use these to gate confirmations for external‑communication and high‑impact actions.
+
+## REST API & docs
+
+- REST reference, auth, scopes and the full error‑code vocabulary: https://gambot.co.il/developers/
+- WhatsApp API for AI agents: https://gambot.co.il/whatsapp-api-for-ai-agents/
 
 ## Security
 

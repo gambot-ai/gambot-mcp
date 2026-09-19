@@ -15,12 +15,22 @@ export interface RequestOptions {
 
 export class GambotApiError extends Error {
   status: number;
+  /** Legacy lowercase slug from the API (e.g. "conversation_closed"). */
   error?: string;
-  constructor(status: number, message: string, error?: string) {
+  /** Canonical machine-readable code from the API (e.g. "CONVERSATION_WINDOW_CLOSED"). Additive field. */
+  code?: string;
+  /** Structured state the API attached to the error (e.g. { canSendTemplate, requiresTemplate, recommendation }). */
+  data?: unknown;
+  /** The full parsed error body, preserved so agent-facing guidance can use every field. */
+  body?: any;
+  constructor(status: number, message: string, error?: string, code?: string, data?: unknown, body?: any) {
     super(message);
     this.name = "GambotApiError";
     this.status = status;
     this.error = error;
+    this.code = code;
+    this.data = data;
+    this.body = body;
   }
 }
 
@@ -78,7 +88,9 @@ export class GambotClient {
     if (!res.ok) {
       const message =
         (parsed && (parsed.message || parsed.error)) || `HTTP ${res.status} on ${method} ${path}`;
-      throw new GambotApiError(res.status, message, parsed?.error);
+      // Preserve the FULL structured error body (code + data + any recommendation) so the MCP layer can
+      // turn it into actionable agent guidance instead of discarding everything but the prose message.
+      throw new GambotApiError(res.status, message, parsed?.error, parsed?.code, parsed?.data, parsed);
     }
     return parsed as T;
   }
