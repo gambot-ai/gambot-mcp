@@ -1332,10 +1332,30 @@ export const TOOLS: GambotTool[] = [
   },
 
   // ── Bots / Automations ───────────────────────────────────────────────────────
+  // MODEL an agent must understand: a conversational bot is usually a PACKAGE of botomations that were
+  // deployed together and share a `sourceFlowId`. Each list item carries `role`, `triggerKind`,
+  // `sourceFlowId` and `linkedBotomationId` so you can reconstruct it. Roles:
+  //   • main_bot   — the conversation (isBot=true). Flavour = menu (opening template + button routing),
+  //                  ai (a 'GambotAi' step hands the chat to "Gambot AI"), or combined.
+  //   • activator (מפעיל) — the TRIGGER that starts the bot. triggerKind: incoming_message (keyword/any),
+  //                  template_button, campaign_lead (lead from an ad/campaign), owner_assigned (contact
+  //                  assigned to an owner such as Gambot AI), scheduled, or inactivity ("no message in X days").
+  //   • gambot_ai  — answers when a contact's owner is "Gambot AI". Route a contact to the AI by assigning
+  //                  its owner to Gambot AI; this botomation triggers on contactOwner == the Gambot AI user.
+  //   • human_intervention_cancel (ביטול בוט בהתערבות אנושית) — trigger fires when a HUMAN agent sends a
+  //                  message; it stops the running bot so it never talks over a human. Seeded active per org.
+  //   • return_to_menu — sends the contact back to the main menu.
+  // The complete package, in order, is: (main bot) + (activator/trigger) + (human-intervention cancel).
+  // Build ALL THREE in one call with gambot_deploy_bot_package (preferred for "create a bot"); toggle the
+  // whole thing with gambot_set_bot_status(includePackage=true); inspect it with gambot_get_bot_package.
   {
     name: "gambot_list_bots",
     title: "List bots",
-    description: "List the organization's bots & chat automations (botomations). Pass botsOnly=true to return only visual menu/AI bots.",
+    description:
+      "List the organization's bots & chat automations (botomations). Pass botsOnly=true for only the visual " +
+      "menu/AI bots. Each item includes role (main_bot | activator | gambot_ai | human_intervention_cancel | " +
+      "return_to_menu | automation), triggerKind, sourceFlowId and linkedBotomationId — botomations sharing a " +
+      "sourceFlowId form ONE deployed bot 'package' (main bot + activator + human-intervention cancel + Gambot AI).",
     inputSchema: { botsOnly: z.boolean().optional() },
     run: (c, a) => c.get("/bots", { botsOnly: a.botsOnly }),
   },
@@ -1345,6 +1365,17 @@ export const TOOLS: GambotTool[] = [
     description: "Get a single bot/automation with its full step definition (trigger + actions).",
     inputSchema: { botId: z.string() },
     run: (c, a) => c.get(`/bots/${encodeURIComponent(a.botId)}`),
+  },
+  {
+    name: "gambot_get_bot_package",
+    title: "Get bot package",
+    description:
+      "Return every botomation deployed together with this one (they share a sourceFlowId): the main bot plus " +
+      "its activator (the trigger, מפעיל), the human-intervention cancel (ביטול בוט בהתערבות אנושית), the Gambot " +
+      "AI answerer and any return-to-menu helper. Use this to see the WHOLE bot before turning it on/off. If the " +
+      "bot has no sourceFlowId, returns just that bot.",
+    inputSchema: { botId: z.string() },
+    run: (c, a) => c.get(`/bots/${encodeURIComponent(a.botId)}/package`),
   },
   {
     name: "gambot_create_keyword_autoreply",
@@ -1411,11 +1442,76 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/bots/menu", a),
   },
   {
+    name: "gambot_deploy_bot_package",
+    title: "Deploy a complete bot (main + activator + human-intervention cancel)",
+    description:
+      "Deploy a WHOLE bot in one call — the way the Bot Builder does it — instead of wiring pieces separately. " +
+      "It creates, in order: (1) the MAIN bot, (2) its ACTIVATOR (מפעיל — the trigger that starts it), and " +
+      "(3) the HUMAN-INTERVENTION CANCEL (ביטול בוט בהתערבות אנושית — stops the bot the instant a human agent " +
+      "replies), all linked by one sourceFlowId so they turn on/off together. " +
+      "botType 'menu' = an opening template with quick-reply buttons routed to replies (needs openingTemplateName + " +
+      "options; the activator SENDS that opening template to start the bot). botType 'keyword' = reply to a keyword/" +
+      "any message (self-activating — its own keyword IS the activator, so no separate activator is made). " +
+      "Choose how the menu bot STARTS with activator.type: 'keyword'/'any_message' (a contact texts in), " +
+      "'inactivity' (no message in noContactDays days), or 'campaign_lead' (a lead arrived from an ad/campaign). " +
+      "AI / combined bots (Gambot AI) are built in the Bot Builder app because they need a Gambot AI configuration. " +
+      "After deploy, toggle the whole thing with gambot_set_bot_status(includePackage=true) or inspect with " +
+      "gambot_get_bot_package.",
+    inputSchema: {
+      name: z.string().describe("Bot name (used to name every botomation in the package)."),
+      botType: z.enum(["menu", "keyword"]).describe("'menu' = opening template + buttons; 'keyword' = reply to a keyword/any message."),
+      status: z.enum(["active", "inactive"]).optional().describe("Applied to the whole package. Default active."),
+      openingTemplateName: z.string().optional().describe("MENU bots: the approved template that shows the menu buttons; the activator sends it to start the bot."),
+      options: z
+        .array(
+          z.object({
+            button: z.string().describe("Button title exactly as on the opening template."),
+            replyTemplateName: z.string().optional(),
+            replyText: z.string().optional(),
+          })
+        )
+        .optional()
+        .describe("MENU bots: one entry per menu button and its reply."),
+      keywords: z.array(z.string()).optional().describe("KEYWORD bots: keyword(s) that trigger the reply."),
+      matchType: z.enum(["equals", "contains"]).optional().describe("KEYWORD bots: how to match keywords. Default 'equals'."),
+      anyMessage: z.boolean().optional().describe("KEYWORD bots: reply to ANY incoming message (ignores keywords)."),
+      replyTemplateName: z.string().optional().describe("KEYWORD bots: approved template to send as the reply."),
+      replyText: z.string().optional().describe("KEYWORD bots: free-text reply (only delivers inside the 24h window)."),
+      activator: z
+        .object({
+          type: z.enum(["keyword", "any_message", "inactivity", "campaign_lead", "none"]).describe("How a MENU bot starts. 'none' = you send the opening template yourself (e.g. via a campaign)."),
+          keywords: z.array(z.string()).optional().describe("For type 'keyword': the keyword(s) that start the bot."),
+          matchType: z.enum(["equals", "contains"]).optional(),
+          noContactDays: z.number().optional().describe("For type 'inactivity': start after this many days with no communication (default 7)."),
+          fromAds: z.boolean().optional().describe("For type 'inactivity': ALSO start when the contact arrived from a paid ad/campaign."),
+        })
+        .optional()
+        .describe("MENU bots only: the activator that sends the opening template. Ignored for keyword bots (they self-activate)."),
+      includeHumanInterventionCancel: z
+        .boolean()
+        .optional()
+        .describe("Also deploy a human-intervention cancel that stops the bot when a human agent replies. Default true."),
+    },
+    run: (c, a) => c.post("/bots/deploy-package", a),
+  },
+  {
     name: "gambot_set_bot_status",
     title: "Activate / deactivate bot",
-    description: "Turn a bot on (active) or off (inactive).",
-    inputSchema: { botId: z.string(), status: z.enum(["active", "inactive"]) },
-    run: (c, a) => c.post(`/bots/${encodeURIComponent(a.botId)}/status`, { status: a.status }),
+    description:
+      "Turn a bot on (active) or off (inactive). By default this toggles ONE botomation. Set includePackage=true " +
+      "to toggle the WHOLE bot — every botomation sharing its sourceFlowId (the main bot + its activator/trigger + " +
+      "the human-intervention cancel + the Gambot AI answerer) — which is what a user usually means by 'turn the " +
+      "bot on/off'. Use gambot_get_bot_package first if you're unsure what will be affected.",
+    inputSchema: {
+      botId: z.string(),
+      status: z.enum(["active", "inactive"]),
+      includePackage: z
+        .boolean()
+        .optional()
+        .describe("Also toggle all botomations deployed with this one (same sourceFlowId). Default false = this botomation only."),
+    },
+    run: (c, a) =>
+      c.post(`/bots/${encodeURIComponent(a.botId)}/status`, { status: a.status, includePackage: a.includePackage }),
   },
   {
     name: "gambot_delete_bot",
