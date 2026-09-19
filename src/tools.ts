@@ -178,6 +178,16 @@ export const TOOLS: GambotTool[] = [
       "a FOOTER, and BUTTONS (QUICK_REPLY / URL / PHONE_NUMBER). " +
       "For a media header you can either put example.header_handle on the HEADER component yourself (upload it first with " +
       "gambot_upload_template_media), or simply pass headerMediaUrl (a public URL) and let Gambot upload it and inject the handle. " +
+      "── SMART GUIDANCE — Gambot enriches your template automatically, so lean on it: " +
+      "(1) LINK BUTTONS: whenever the message refers to a link/CTA (book, track, open, pay, view), ADD a URL button " +
+      '({type:"URL",text:"...",url:"https://..."}) instead of pasting the raw link in the body — one-tap buttons convert far better. ' +
+      "(2) CLICK TRACKING (tracking link): STATIC url-button links are auto-wrapped in a Gambot tracked short link so clicks are logged " +
+      "(and can fire botomations). It's ON by default for MARKETING; you always pass the REAL destination url — Gambot swaps in the tracker. " +
+      'Set "trackClicks":false on a URL button to keep the raw link, or "trackClicks":true to force tracking on a non-marketing template. ' +
+      "(3) MARKETING / BROADCAST (דיוור): use category 'MARKETING' for any promotional broadcast. Its opt-out FOOTER is MANDATORY and " +
+      "OWNED by Gambot — DO NOT add your own FOOTER for MARKETING; Gambot adds a localized opt-out footer (Hebrew 'להסרה יש להשיב הסר', " +
+      "else 'Reply STOP to unsubscribe') and OVERRIDES any non-opt-out footer you passed. An existing opt-out footer or a 'הסר'/'STOP' " +
+      "QUICK_REPLY button is respected. " +
       "The new template starts as PENDING (awaiting Meta approval). You do NOT have to wait for approval to SCHEDULE with it: you can " +
       "immediately call gambot_create_campaign with campaignTrigger='Scheduled' and this template's id — it just has to be APPROVED before the scheduled runAt.",
     inputSchema: {
@@ -191,8 +201,9 @@ export const TOOLS: GambotTool[] = [
             'HEADER text: {type:"HEADER",format:"TEXT",text:"Hi {{1}}",example:{header_text:["Dana"]}} | ' +
             'HEADER media: {type:"HEADER",format:"IMAGE",example:{header_handle:["<handle>"]}} | ' +
             'BODY: {type:"BODY",text:"Your order {{1}} shipped",example:{body_text:[["1234"]]}} | ' +
-            'FOOTER: {type:"FOOTER",text:"Reply STOP to opt out"} | ' +
-            'BUTTONS: {type:"BUTTONS",buttons:[{type:"QUICK_REPLY",text:"Track"},{type:"URL",text:"Open",url:"https://x.co/{{1}}",example:["abc"]},{type:"PHONE_NUMBER",text:"Call",phone_number:"+972500000000"}]}'
+            'FOOTER: {type:"FOOTER",text:"..."} (skip for MARKETING — Gambot owns the opt-out footer) | ' +
+            'BUTTONS: {type:"BUTTONS",buttons:[{type:"QUICK_REPLY",text:"Track"},{type:"URL",text:"Open",url:"https://x.co/book"},{type:"PHONE_NUMBER",text:"Call",phone_number:"+972500000000"}]}. ' +
+            'On a URL button pass the REAL destination in "url"; Gambot auto-tracks clicks (add "trackClicks":false to opt out, or "trackClicks":true to force). Prefer a URL button over a raw link in the body.'
         ),
       headerMediaUrl: z
         .string()
@@ -243,12 +254,28 @@ export const TOOLS: GambotTool[] = [
     title: "Create contact",
     description:
       "Create a contact (returns the existing one if the phone is already known). " +
-      "Custom/dynamic fields go under 'customFields' (see gambot_get_contact_fields for keys).",
+      "Custom/dynamic fields go under 'customFields' (see gambot_get_contact_fields for keys). " +
+      "── MARKETING COMPLIANCE — always consider these when creating a contact: " +
+      "• consent ('הסכמה לדיוור'): set consent=true ONLY when the person actually agreed to receive marketing " +
+      "(they ticked a box / said yes / signed up). Set consent=false to record an opt-out. If you don't know, " +
+      "OMIT it — never assume true. consent=false contacts are auto-excluded from every broadcast. " +
+      "• source ('מקור'): where the contact/consent came from (e.g. 'website form', 'landing page', 'phone call', " +
+      "'in-store', 'imported list'). Pass it whenever known — it's the audit trail for the opt-in and is stored as " +
+      "both the contact's source and the consent source. " +
+      "To change consent later use gambot_set_contact_consent.",
     inputSchema: {
       phoneNumber: phone,
       name: z.string().optional(),
       email: z.string().optional(),
       keys: z.array(z.string()).optional().describe("Tags/lists (default Leads)"),
+      consent: z
+        .boolean()
+        .optional()
+        .describe("Marketing consent ('הסכמה לדיוור'). true = opted-in (mailable); false = opted-out (auto-excluded from broadcasts). OMIT if unknown — never assume true."),
+      source: z
+        .string()
+        .optional()
+        .describe("Where the contact/consent came from ('מקור'), e.g. 'website form', 'phone call', 'imported list'. Recorded as the consent audit source."),
       customFields: z.record(z.any()).optional().describe("Custom field values, e.g. { city: 'תל אביב' }."),
       country: z.string().optional().describe("ISO-3166 alpha-2 (e.g. 'US','IL') to internationalize a local/national phoneNumber. Optional if the organization has a saved country (set at onboarding)."),
     },
@@ -259,6 +286,8 @@ export const TOOLS: GambotTool[] = [
         email: a.email,
         keys: a.keys,
         country: a.country,
+        ...(typeof a.consent === "boolean" ? { consent: a.consent } : {}),
+        ...(a.source ? { source: a.source } : {}),
         ...(a.customFields ? { customFields: a.customFields } : {}),
       }),
   },
@@ -1125,6 +1154,48 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post(`/campaigns/${encodeURIComponent(a.campaignId)}/run`),
   },
   {
+    name: "gambot_list_scheduled_runs",
+    title: "List a campaign's scheduled runs",
+    description:
+      "List the concrete SCHEDULED RUNS (occurrences) of a scheduled/recurring/block campaign — every future date it will fire, " +
+      "with each occurrence's runAt, status, and (for split campaigns) the recipient batch range. Works for ALL scheduled types: " +
+      "a one-time scheduled campaign (single occurrence), a recurring campaign (e.g. 'every Tuesday'), auto-split blocks, and " +
+      "manually-timed blocks. Use this FIRST to get the exact runAt values, then pass one to gambot_skip_scheduled_run (turn a " +
+      "single date off) or gambot_reschedule_scheduled_run (move a date). If `runs` is empty the campaign is pattern-only (simple " +
+      "interval with no materialized dates) — change its pattern with gambot_update_campaign instead.",
+    inputSchema: { campaignId: z.string() },
+    run: (c, a) => c.get(`/campaigns/${encodeURIComponent(a.campaignId)}/runs`),
+  },
+  {
+    name: "gambot_skip_scheduled_run",
+    title: "Skip / cancel a scheduled run",
+    description:
+      "Cancel a SINGLE upcoming occurrence of a scheduled/recurring campaign (e.g. 'skip this coming Tuesday but keep the weekly " +
+      "schedule'), or cancel ALL upcoming occurrences at once. Pass `runAt` (an exact value from gambot_list_scheduled_runs, matched " +
+      "to the minute) to skip just that date, OR scope='upcoming' to cancel every future run (already-sent runs are always kept). " +
+      "The rest of the schedule is re-armed automatically and untouched. To remove the whole campaign entirely use gambot_delete_campaign.",
+    inputSchema: {
+      campaignId: z.string(),
+      runAt: z.string().optional().describe("The occurrence to skip (ISO-8601, from gambot_list_scheduled_runs). Omit when using scope='upcoming'."),
+      scope: z.enum(["upcoming"]).optional().describe("'upcoming' cancels ALL future occurrences (past runs kept)."),
+    },
+    run: (c, a) => c.post(`/campaigns/${encodeURIComponent(a.campaignId)}/runs/skip`, { runAt: a.runAt, scope: a.scope }),
+  },
+  {
+    name: "gambot_reschedule_scheduled_run",
+    title: "Move a scheduled run to a new time",
+    description:
+      "MOVE a single occurrence of a scheduled/recurring campaign to a new date/time, leaving every other occurrence untouched " +
+      "(e.g. 'push this Tuesday's send to Wednesday'). Pass `runAt` (the existing occurrence from gambot_list_scheduled_runs, matched " +
+      "to the minute) and `newRunAt` (the new datetime). The campaign's timezone is preserved.",
+    inputSchema: {
+      campaignId: z.string(),
+      runAt: z.string().describe("Existing occurrence to move (ISO-8601, from gambot_list_scheduled_runs)."),
+      newRunAt: z.string().describe("New date/time for that occurrence (ISO-8601)."),
+    },
+    run: (c, a) => c.post(`/campaigns/${encodeURIComponent(a.campaignId)}/runs/reschedule`, { runAt: a.runAt, newRunAt: a.newRunAt }),
+  },
+  {
     name: "gambot_send_campaign",
     title: "Send ad-hoc campaign",
     description:
@@ -1383,7 +1454,14 @@ export const TOOLS: GambotTool[] = [
     description:
       "Create a bot that automatically replies to an incoming WhatsApp message. Trigger on specific keyword(s) " +
       "(matchType 'equals' or 'contains') or on ANY incoming message (anyMessage=true). The reply is an approved " +
-      "template (replyTemplateName) or free text (replyText — only delivers inside the 24h service window).",
+      "template (replyTemplateName) or free text (replyText — only delivers inside the 24h service window). " +
+      "── OPTIONAL ENHANCEMENTS (regular/free-text replies only — full parity with the visual Bot Builder): " +
+      "• contextCheck: verify the incoming reply is on-topic before advancing ('בדיקת הקשר') — pass contextPrompt to " +
+      "define what counts as in-context (auto-defaulted if omitted). " +
+      "• aiCompose: instead of a fixed replyText, let Gambot AI phrase the reply in real time from a short instruction " +
+      "(aiComposePrompt); sent as 'Gambot AI'. " +
+      "• outsideHoursMessage: send a DIFFERENT reply text outside the org's business hours. " +
+      "• reminders: follow-up reminders on the primary flow if the contact doesn't respond.",
     inputSchema: {
       name: z.string().describe("Internal bot name."),
       keywords: z.array(z.string()).optional().describe("Keyword(s) that trigger the reply. Omit and set anyMessage=true to catch everything."),
@@ -1391,6 +1469,21 @@ export const TOOLS: GambotTool[] = [
       anyMessage: z.boolean().optional().describe("Reply to ANY incoming message (ignores keywords)."),
       replyTemplateName: z.string().optional().describe("Approved template to send as the reply."),
       replyText: z.string().optional().describe("Free-text reply (used when no template is given)."),
+      contextCheck: z.boolean().optional().describe("Enable an AI CONTEXT check ('בדיקת הקשר') on the incoming reply — verify it's on-topic before advancing."),
+      contextPrompt: z.string().optional().describe("What counts as an in-context reply (used when contextCheck is on). Auto-defaulted if omitted."),
+      aiCompose: z.boolean().optional().describe("Let Gambot AI phrase the reply live instead of sending fixed replyText (regular replies only)."),
+      aiComposePrompt: z.string().optional().describe("Short instruction for aiCompose — what the AI should write."),
+      outsideHoursMessage: z.string().optional().describe("Alternative reply text to send OUTSIDE business hours (regular replies only)."),
+      reminders: z
+        .array(
+          z.object({
+            afterMinutes: z.number().describe("Send this reminder after N minutes of no response."),
+            message: z.string().describe("Reminder text."),
+            action: z.enum(["custom", "resend_template", "primary_flow_default"]).optional().describe("Default 'custom' (send message)."),
+          })
+        )
+        .optional()
+        .describe("Follow-up reminders on the primary flow if the contact doesn't respond."),
       status: z.enum(["active", "inactive"]).optional().describe("Default active."),
     },
     run: (c, a) => c.post("/bots/keyword-reply", a),
@@ -1424,7 +1517,10 @@ export const TOOLS: GambotTool[] = [
     description:
       "Create a menu bot: an opening template with quick-reply buttons that route each tap to a reply. " +
       "Provide openingTemplateName and options (each button + its reply template/text). " +
-      "Start the menu for a contact by sending the opening template (e.g. via a campaign).",
+      "Start the menu for a contact by sending the opening template (e.g. via a campaign). " +
+      "Each option's free-text reply can be enhanced (Bot Builder parity): aiCompose + aiComposePrompt (Gambot AI " +
+      "phrases it live) and outsideHoursMessage (different text outside business hours). Add reminders[] to send " +
+      "follow-ups on the primary/main flow if the contact goes quiet ('תזכורות בפלואו הראשי').",
     inputSchema: {
       name: z.string(),
       openingTemplateName: z.string().describe("Template that shows the menu buttons."),
@@ -1434,9 +1530,22 @@ export const TOOLS: GambotTool[] = [
             button: z.string().describe("Button title on the opening template."),
             replyTemplateName: z.string().optional(),
             replyText: z.string().optional(),
+            aiCompose: z.boolean().optional().describe("Let Gambot AI phrase this option's reply live (regular replies only)."),
+            aiComposePrompt: z.string().optional().describe("Short instruction for aiCompose on this option."),
+            outsideHoursMessage: z.string().optional().describe("Alternative reply text OUTSIDE business hours for this option."),
           })
         )
         .describe("One entry per menu option."),
+      reminders: z
+        .array(
+          z.object({
+            afterMinutes: z.number(),
+            message: z.string(),
+            action: z.enum(["custom", "resend_template", "primary_flow_default"]).optional(),
+          })
+        )
+        .optional()
+        .describe("Follow-up reminders on the primary/main flow if the contact doesn't respond."),
       status: z.enum(["active", "inactive"]).optional(),
     },
     run: (c, a) => c.post("/bots/menu", a),
@@ -1468,6 +1577,9 @@ export const TOOLS: GambotTool[] = [
             button: z.string().describe("Button title exactly as on the opening template."),
             replyTemplateName: z.string().optional(),
             replyText: z.string().optional(),
+            aiCompose: z.boolean().optional().describe("Let Gambot AI phrase this option's reply live (regular replies only)."),
+            aiComposePrompt: z.string().optional().describe("Short instruction for aiCompose on this option."),
+            outsideHoursMessage: z.string().optional().describe("Alternative reply text OUTSIDE business hours for this option."),
           })
         )
         .optional()
@@ -1477,6 +1589,21 @@ export const TOOLS: GambotTool[] = [
       anyMessage: z.boolean().optional().describe("KEYWORD bots: reply to ANY incoming message (ignores keywords)."),
       replyTemplateName: z.string().optional().describe("KEYWORD bots: approved template to send as the reply."),
       replyText: z.string().optional().describe("KEYWORD bots: free-text reply (only delivers inside the 24h window)."),
+      contextCheck: z.boolean().optional().describe("KEYWORD bots: enable an AI CONTEXT check ('בדיקת הקשר') on the incoming reply — verify it's on-topic before advancing."),
+      contextPrompt: z.string().optional().describe("KEYWORD bots: what counts as an in-context reply (used with contextCheck). Auto-defaulted if omitted."),
+      aiCompose: z.boolean().optional().describe("KEYWORD bots: let Gambot AI phrase the reply live instead of fixed replyText (regular replies only)."),
+      aiComposePrompt: z.string().optional().describe("KEYWORD bots: short instruction for aiCompose."),
+      outsideHoursMessage: z.string().optional().describe("KEYWORD bots: alternative reply text OUTSIDE business hours (regular replies only)."),
+      reminders: z
+        .array(
+          z.object({
+            afterMinutes: z.number(),
+            message: z.string(),
+            action: z.enum(["custom", "resend_template", "primary_flow_default"]).optional(),
+          })
+        )
+        .optional()
+        .describe("Follow-up reminders on the primary/main flow ('תזכורות בפלואו הראשי') if the contact doesn't respond. Applies to menu & keyword bots."),
       activator: z
         .object({
           type: z.enum(["keyword", "any_message", "inactivity", "campaign_lead", "none"]).describe("How a MENU bot starts. 'none' = you send the opening template yourself (e.g. via a campaign)."),
@@ -1527,12 +1654,23 @@ export const TOOLS: GambotTool[] = [
       "Advanced: create a bot from a full botomation object when the high-level builders aren't enough. " +
       "steps[]: step 1 is the trigger (action 'IncomingMessage', …), the rest are actions ('SendMessage','switchCase'," +
       "'Condition','GambotAi','Delay','GambotAction',…). Use {{Step_1_PhoneNumber}} / {{Step_1_Message}} placeholders. " +
-      "Prefer gambot_create_keyword_autoreply / _template_button_autoreply / _menu_bot for common cases.",
+      "── STEP CONFIG FEATURES you can set (parity with the visual Bot Builder): " +
+      "• On a REGULAR IncomingMessage trigger config → aiContextGate:{enabled:true,prompt,model:'gpt-4o-mini',onExhausted:'advance'} " +
+      "for an on-topic CONTEXT check ('בדיקת הקשר'). " +
+      "• On a REGULAR SendMessage config → aiCompose:{enabled:true,prompt,assignToGambotAiAfter:true} to have Gambot AI phrase it live, " +
+      "and businessHoursAlternative:{enabled:true,outsideHoursMessage:'...'} for a different text outside business hours. " +
+      "• On the botomation itself → primaryFlowSettings:{reminderEnabled:true,reminders:[{afterMinutes,message,action}]} for follow-up reminders. " +
+      "Prefer gambot_create_keyword_autoreply / _template_button_autoreply / _menu_bot / _deploy_bot_package for common cases — they expose " +
+      "contextCheck, aiCompose, outsideHoursMessage and reminders as simple params.",
     inputSchema: {
       name: z.string(),
       steps: z
         .array(z.record(z.any()))
         .describe("Ordered steps; step 1 is the trigger. Each: { StepId, type:'trigger'|'action', action, config }."),
+      primaryFlowSettings: z
+        .record(z.any())
+        .optional()
+        .describe("Bot-level follow-up reminders / closing on the primary flow, e.g. { reminderEnabled:true, reminders:[{afterMinutes,message,action}] }."),
       isBot: z.boolean().optional(),
       status: z.enum(["active", "inactive"]).optional(),
     },

@@ -37,6 +37,11 @@ BROADCASTS — pick the right path (this mirrors the Gambot web app):
 
 Summary of the rule: group-run = immediate & unsaved; scheduled (once/recurring) = always a campaign; one-time Excel = always a campaign.
 
+MANAGING a scheduled/recurring campaign's dates (e.g. "skip this coming Tuesday", "move next week's send"):
+- gambot_list_scheduled_runs → see every upcoming occurrence (runAt + status + batch) of a campaign.
+- gambot_skip_scheduled_run → turn ONE date off (pass its runAt) or cancel ALL upcoming (scope='upcoming'); the rest of the schedule stays.
+- gambot_reschedule_scheduled_run → move ONE occurrence to a new time. To change the whole pattern use gambot_update_campaign; to remove the campaign entirely use gambot_delete_campaign.
+
 TEMPLATE vs REGULAR for broadcasts:
 - Prefer a TEMPLATE (messageType='Template' + templateId). A 'regular' free-text broadcast is delivered ONLY to recipients
   whose 24h window is open and SILENTLY FAILS for everyone else — never use it for a cold/one-way audience.
