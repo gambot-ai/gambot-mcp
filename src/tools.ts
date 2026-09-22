@@ -1994,4 +1994,59 @@ export const TOOLS: GambotTool[] = [
     },
     run: (c, a) => c.get("/analytics/bots", { period: a.period, from: a.from, to: a.to }),
   },
+
+  // ── Webhooks (event forwarding) ─────────────────────────────────────────────
+  {
+    name: "gambot_register_webhook",
+    title: "Register event-forwarding webhook",
+    description:
+      "Register (or update) a WEBHOOK so Gambot POSTs every matching WhatsApp event to your server as it happens. " +
+      "Each delivery is a JSON 'envelope': { type, event, types[], organization, receivedAt, meta_obj } where meta_obj is Meta's raw payload, " +
+      "plus request headers X-Gambot-Organization and X-Gambot-Event. Provide the destination `url` (https recommended); optionally an `authHeader` " +
+      "we send verbatim as the Authorization header on every call, and `events` toggles to choose which event types to receive (all on by default). " +
+      "This is the programmatic equivalent of Settings → Event Forwarding, so it also shows up in the console. " +
+      "After registering, verify it with gambot_test_webhook. To stop delivery use gambot_delete_webhook.",
+    inputSchema: {
+      url: z.string().describe("Destination URL that will receive POSTs, e.g. https://your-server.com/webhook"),
+      authHeader: z.string().optional().describe("Optional value sent verbatim as the Authorization header on every call (e.g. 'Bearer my-secret')."),
+      events: z
+        .object({
+          incomingMessage: z.boolean().optional().describe("Forward incoming WhatsApp messages (default true)."),
+          messageStatus: z.boolean().optional().describe("Forward message status: sent/delivered/read/failed (default true)."),
+          templateStatus: z.boolean().optional().describe("Forward template change/approval updates (default true)."),
+          other: z.boolean().optional().describe("Forward any other Meta events (default true)."),
+        })
+        .optional()
+        .describe("Which event types to forward. Omit to receive everything."),
+    },
+    run: (c, a) => c.post("/webhooks/forward", { url: a.url, authHeader: a.authHeader, events: a.events }),
+  },
+  {
+    name: "gambot_get_webhook",
+    title: "Get webhook registration",
+    description:
+      "Return the organization's current event-forwarding webhook: whether it's enabled, the destination url, whether an auth header is set, and which event types are forwarded.",
+    inputSchema: {},
+    run: (c) => c.get("/webhooks/forward"),
+  },
+  {
+    name: "gambot_delete_webhook",
+    title: "Unregister webhook",
+    description:
+      "Disable event forwarding (stop POSTing events to the registered URL). The URL/settings are kept on file, so re-enabling later is a single gambot_register_webhook call.",
+    inputSchema: {},
+    run: (c) => c.del("/webhooks/forward"),
+  },
+  {
+    name: "gambot_test_webhook",
+    title: "Send a test webhook event",
+    description:
+      "Fire a synthetic sample 'incoming_message' envelope (flagged test:true) at the registered webhook URL — or at an override `url` passed here — and return the delivery result: { delivered, statusCode, durationMs, responsePreview }. " +
+      "Use this to confirm your endpoint actually receives Gambot's calls. The attempt is recorded in the delivery log.",
+    inputSchema: {
+      url: z.string().optional().describe("Optional override URL to test instead of the registered one (lets you test before registering)."),
+      authHeader: z.string().optional().describe("Optional Authorization header to send with the override URL test."),
+    },
+    run: (c, a) => c.post("/webhooks/test", { url: a.url, authHeader: a.authHeader }),
+  },
 ];
