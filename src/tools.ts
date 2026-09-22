@@ -2049,4 +2049,151 @@ export const TOOLS: GambotTool[] = [
     },
     run: (c, a) => c.post("/webhooks/test", { url: a.url, authHeader: a.authHeader }),
   },
+
+  // ── Connections (connected integrations) ────────────────────────────────────
+  {
+    name: "gambot_list_connections",
+    title: "List connections",
+    description:
+      "List the organization's connected integrations (the same as Settings → Connections): email & calendar OAuth accounts (Google/Microsoft), Facebook/Meta lead-ads pages, shop/CRM links, plus the org's WhatsApp numbers. " +
+      "Only non-secret metadata is returned (ids, providers, status, account email). Use a connection's id as the connectionId elsewhere (e.g. gambot_list_facebook_lead_forms, gambot_create_facebook_lead_bot) and its provider ('google'/'microsoft') to pick a mailbox/calendar.",
+    inputSchema: {
+      type: z.string().optional().describe("Optional connectionType filter, e.g. 'FacebookLeadAds'."),
+    },
+    run: (c, a) => c.get("/connections", { type: a.type }),
+  },
+
+  // ── Email (transactional send + email campaigns) ────────────────────────────
+  {
+    name: "gambot_send_email",
+    title: "Send email",
+    description:
+      "Send a single email over a connected Google/Microsoft mailbox (Settings → Connections). Provide to, subject and body. " +
+      "Set isHtml=false for plain text. Optionally cc/bcc and a provider ('google'/'microsoft' or a connection id; blank ⇒ first available).",
+    inputSchema: {
+      to: z.string().describe("Recipient email address."),
+      subject: z.string().describe("Email subject."),
+      body: z.string().describe("Email body (HTML by default; set isHtml=false for plain text)."),
+      isHtml: z.boolean().optional().describe("Whether body is HTML (default true)."),
+      cc: z.array(z.string()).optional().describe("Optional CC recipients."),
+      bcc: z.array(z.string()).optional().describe("Optional BCC recipients."),
+      provider: z.string().optional().describe("Which mailbox to send from: 'google'/'microsoft' or a connection id. Blank ⇒ first available."),
+    },
+    run: (c, a) =>
+      c.post("/email/send", {
+        to: a.to,
+        subject: a.subject,
+        body: a.body,
+        isHtml: a.isHtml,
+        cc: a.cc,
+        bcc: a.bcc,
+        provider: a.provider,
+      }),
+  },
+  {
+    name: "gambot_list_email_campaigns",
+    title: "List email campaigns",
+    description: "List all email marketing campaigns for the organization.",
+    inputSchema: {},
+    run: (c) => c.get("/email/campaigns"),
+  },
+  {
+    name: "gambot_get_email_campaign",
+    title: "Get email campaign",
+    description: "Get a single email campaign by id.",
+    inputSchema: { campaignId: z.string() },
+    run: (c, a) => c.get(`/email/campaigns/${encodeURIComponent(a.campaignId)}`),
+  },
+  {
+    name: "gambot_create_email_campaign",
+    title: "Create email campaign",
+    description:
+      "Create an email marketing campaign. Content: either a saved templateId, or inline subject+body. " +
+      "Audience: a CRM segment via contactFilters ({ filters:[…], logic:'AND' }) OR an explicit excelRecipients list ([{ email, name, variables }]). " +
+      "Pass run=true to create AND send immediately in one call. Sends on the same durable, resumable engine as the app (safe for large lists, no duplicates).",
+    inputSchema: {
+      campaignName: z.string().describe("Campaign name."),
+      templateId: z.string().optional().describe("Saved email template id (omit if using inline subject+body)."),
+      subject: z.string().optional().describe("Inline subject (when not using a template)."),
+      body: z.string().optional().describe("Inline HTML body (when not using a template)."),
+      contentSource: z.enum(["template", "inline", "html"]).optional().describe("Content source; inferred from templateId/subject when omitted."),
+      provider: z.string().optional().describe("Mailbox to send from: 'google'/'microsoft' or a connection id."),
+      recipientSource: z.enum(["Contacts", "Excel"]).optional().describe("Audience source; inferred from contactFilters/excelRecipients when omitted."),
+      contactFilters: z.any().optional().describe("CRM segment: { filters:[…], logic:'AND'|'OR' }."),
+      excelRecipients: z.array(z.any()).optional().describe("Explicit recipients: [{ email, name, variables:{…} }]."),
+      templateVariables: z.any().optional().describe("Optional template variable mapping."),
+      runAt: z.string().optional().describe("Optional ISO-8601 time to schedule the send."),
+      timezone: z.string().optional().describe("Optional IANA timezone for scheduling (e.g. 'Asia/Jerusalem')."),
+      run: z.boolean().optional().describe("Create AND send now in one call (default false)."),
+    },
+    run: (c, a) => c.post("/email/campaigns", a),
+  },
+  {
+    name: "gambot_run_email_campaign",
+    title: "Run email campaign",
+    description: "Run (send) a saved email campaign now. Uses the durable, resumable engine — safe for large audiences, no duplicates.",
+    inputSchema: { campaignId: z.string() },
+    run: (c, a) => c.post(`/email/campaigns/${encodeURIComponent(a.campaignId)}/run`),
+  },
+
+  // ── Calendar ────────────────────────────────────────────────────────────────
+  {
+    name: "gambot_list_calendar_events",
+    title: "List calendar events",
+    description:
+      "List calendar events in a date range from a connected Google/Microsoft calendar (Settings → Connections). " +
+      "Pass provider ('google'/'microsoft' or a connection id; blank ⇒ first connected calendar) and an optional startDate/endDate (ISO-8601; default = current month).",
+    inputSchema: {
+      provider: z.string().optional().describe("Calendar to read: 'google'/'microsoft' or a connection id. Blank ⇒ first connected calendar."),
+      startDate: z.string().optional().describe("Range start (ISO-8601). Default = first day of the current month."),
+      endDate: z.string().optional().describe("Range end (ISO-8601). Default = start + 1 month."),
+    },
+    run: (c, a) => c.get("/calendar/events", { provider: a.provider, startDate: a.startDate, endDate: a.endDate }),
+  },
+
+  // ── Facebook / Meta Lead Ads ────────────────────────────────────────────────
+  {
+    name: "gambot_list_facebook_lead_connections",
+    title: "List Facebook lead-ads connections",
+    description:
+      "List the organization's connected Facebook/Meta Lead Ads pages. Each item's connectionId is what you pass to gambot_list_facebook_lead_forms and gambot_create_facebook_lead_bot.",
+    inputSchema: {},
+    run: (c) => c.get("/leadforms/connections"),
+  },
+  {
+    name: "gambot_list_facebook_lead_forms",
+    title: "List Facebook lead forms",
+    description:
+      "List the leadgen forms of a connected Facebook page. Pass a connectionId (from gambot_list_facebook_lead_connections; blank ⇒ the org's first Facebook Lead Ads connection). Returns [{ id, name, status }].",
+    inputSchema: {
+      connectionId: z.string().optional().describe("Facebook Lead Ads connection id. Blank ⇒ the org's first one."),
+    },
+    run: (c, a) => c.get("/leadforms", { connectionId: a.connectionId }),
+  },
+  {
+    name: "gambot_create_facebook_lead_bot",
+    title: "Create Facebook lead auto-reply bot",
+    description:
+      "Create a bot that auto-replies the moment a new lead arrives from a Facebook/Meta lead form. Provide a connectionId (from gambot_list_facebook_lead_connections) and a reply (replyTemplateName or replyText). " +
+      "Optionally restrict to specific formIds (from gambot_list_facebook_lead_forms; blank ⇒ any form on the page). The reply is sent to the lead's WhatsApp; lead fields are available as placeholders like {{Step_1_facebook_lead_data_full_name}}.",
+    inputSchema: {
+      name: z.string().describe("Bot name."),
+      connectionId: z.string().describe("Facebook Lead Ads connection id (see gambot_list_facebook_lead_connections)."),
+      pageId: z.string().optional().describe("Facebook page id (defaults from the connection)."),
+      formIds: z.array(z.string()).optional().describe("Specific lead form ids to react to; blank ⇒ any form on the page."),
+      replyTemplateName: z.string().optional().describe("Approved WhatsApp template to send as the reply."),
+      replyText: z.string().optional().describe("Free-text reply (used when no template is given)."),
+      status: z.enum(["active", "inactive"]).optional().describe("Bot status (default active)."),
+    },
+    run: (c, a) =>
+      c.post("/bots/facebook-lead-reply", {
+        name: a.name,
+        connectionId: a.connectionId,
+        pageId: a.pageId,
+        formIds: a.formIds,
+        replyTemplateName: a.replyTemplateName,
+        replyText: a.replyText,
+        status: a.status,
+      }),
+  },
 ];
