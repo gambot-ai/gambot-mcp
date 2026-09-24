@@ -1677,6 +1677,77 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/bots", a),
   },
 
+  // ── Gambot AI "brain" (how the AI answers) ─────────────────────────────────────
+  // The AI CONFIG (purpose, tone, instructions, language, knowledge Q&A) that a 'gambot_ai' botomation
+  // hands the chat to. SEPARATE from the botomation (api/v1/bots): the brain = HOW it answers; the
+  // botomation = WHEN it answers (trigger contactOwner == "Gambot AI"). On signup Gambot scans the org's
+  // website and AUTO-BUILDS a brain + a "GAMBOT AI AGENT" botomation (seeded inactive) — so usually you
+  // LIST the existing brain and UPGRADE it rather than create a new one.
+  {
+    name: "gambot_list_ai",
+    title: "List Gambot AI models",
+    description:
+      "List the organization's Gambot AI 'brains' (how the AI answers: purpose, tone, language, Q&A count). " +
+      "Most orgs already have one auto-built from their website at signup — find it here before creating a new one. " +
+      "Pair a brain with its botomation via gambot_list_bots (role 'gambot_ai').",
+    inputSchema: {},
+    run: (c) => c.get("/ai"),
+  },
+  {
+    name: "gambot_get_ai",
+    title: "Get Gambot AI model",
+    description: "Get one Gambot AI brain with its full configuration (purpose, tone, instructions, language, Q&A).",
+    inputSchema: { id: z.string().describe("The Gambot AI model id (from gambot_list_ai).") },
+    run: (c, a) => c.get(`/ai/${encodeURIComponent(String(a.id))}`),
+  },
+  {
+    name: "gambot_update_ai",
+    title: "Update (upgrade) Gambot AI model",
+    description:
+      "Update/upgrade an existing Gambot AI brain. PATCH semantics — only the fields you pass change; everything " +
+      "else (including learned Q&A, style examples and the knowledge-base file) is kept. Use this to refine the " +
+      "auto-built AI: sharpen its purpose/instructions, set the tone or language, add Q&A, or toggle escalate-to-human.",
+    inputSchema: {
+      id: z.string().describe("The Gambot AI model id (from gambot_list_ai)."),
+      botName: z.string().optional().describe("Display name of the AI."),
+      botPurpose: z.string().optional().describe("What the AI is for (e.g. customer support, FAQ, sales)."),
+      botTone: z.string().optional().describe("Tone: formal | casual | friendly | custom."),
+      botInstructions: z.string().optional().describe("Free-text system instructions that steer how the AI answers."),
+      botLanguage: z.string().optional().describe("Primary language, e.g. 'he' or 'en'."),
+      escalateToHuman: z.boolean().optional().describe("Hand off to a human agent when the AI can't help."),
+      handleMultipleLanguages: z.boolean().optional().describe("Answer in the customer's language."),
+      personalizedResponses: z.boolean().optional().describe("Personalize replies using contact/CRM context."),
+      qnAPairs: z
+        .array(z.object({ question: z.string(), answer: z.string() }))
+        .optional()
+        .describe("Knowledge Q&A pairs (REPLACES the live set — send the full list you want)."),
+    },
+    run: (c, a) => {
+      const { id, ...rest } = a as Record<string, unknown>;
+      return c.patch(`/ai/${encodeURIComponent(String(id))}`, rest);
+    },
+  },
+  {
+    name: "gambot_create_ai",
+    title: "Create Gambot AI model",
+    description:
+      "Create a NEW Gambot AI brain. Only do this if the org has none (check gambot_list_ai first — most orgs already " +
+      "have one auto-built from their website). After creating, wire it to a botomation whose trigger is " +
+      "contactOwner == 'Gambot AI' (built in the Bot Builder app) and route contacts by assigning owner = 'Gambot AI'.",
+    inputSchema: {
+      botName: z.string().describe("Display name of the AI."),
+      botPurpose: z.string().optional().describe("What the AI is for (customer support, FAQ, sales, …)."),
+      botTone: z.string().optional().describe("Tone: formal | casual | friendly | custom."),
+      botInstructions: z.string().optional().describe("Free-text system instructions."),
+      botLanguage: z.string().optional().describe("Primary language, e.g. 'he' or 'en'."),
+      escalateToHuman: z.boolean().optional(),
+      handleMultipleLanguages: z.boolean().optional(),
+      personalizedResponses: z.boolean().optional(),
+      qnAPairs: z.array(z.object({ question: z.string(), answer: z.string() })).optional().describe("Initial knowledge Q&A pairs."),
+    },
+    run: (c, a) => c.post("/ai", a),
+  },
+
   // ── Onboarding (create account / payment / connect WhatsApp) ─────────────────
   {
     name: "gambot_check_organization",
