@@ -283,7 +283,7 @@ export function createGambotMcpServer(client: GambotClient, opts: CreateServerOp
   const onboardingOnly = opts.onboardingOnly ?? false;
   const tools = onboardingOnly ? PUBLIC_ONBOARDING_TOOLS : TOOLS;
   const server = new McpServer(
-    { name: "gambot-mcp", version: "1.6.0" },
+    { name: "gambot-mcp", version: "1.6.1" },
     { instructions: onboardingOnly ? ONBOARDING_INSTRUCTIONS : GAMBOT_INSTRUCTIONS }
   );
 

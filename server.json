@@ -7,20 +7,20 @@
     "url": "https://github.com/gambot-ai/gambot-mcp",
     "source": "github"
   },
-  "version": "1.6.0",
+  "version": "1.6.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "gambot-mcp",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "GAMBOT_TOKEN",
-          "description": "Your Gambot Token (gmbt_…) from Gambot Settings → General. Authorizes the server against your organization.",
-          "isRequired": true,
+          "description": "Your Gambot Token (gmbt_…) from Gambot Settings → General. OPTIONAL: leave it unset if you don't have an account yet — the server then starts in token-less ONBOARDING mode (self-serve account creation only). Set it to unlock the full tool set (messaging, campaigns, CRM, bots, analytics).",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         },

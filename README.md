@@ -8,6 +8,8 @@ Connect **WhatsApp** to **Claude, ChatGPT, Gemini and Cursor**. This is a [Model
 
 **One-click install (Cursor):** [➕ Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=gambot&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImdhbWJvdC1tY3AiXSwiZW52Ijp7IkdBTUJPVF9UT0tFTiI6IiJ9fQ==) — then paste your Gambot token into the server's `env`.
 
+> **No Gambot account yet?** Install exactly the same way but **leave the token empty** — the server starts in **token‑less onboarding mode** and the agent creates your WhatsApp Business account from scratch. See [Token‑less onboarding mode](#no-token-yet-tokenless-onboarding-mode).
+
 It wraps the public REST API at `https://api.gambot.co.il/api/v1`, authenticated with your organization's **Gambot Token**. MCP is an AI‑facing **interface** over Gambot — it uses the same business logic as the REST API, and is **not** a separate backend.
 
 ## Why Gambot instead of building on Meta's Cloud API directly
@@ -44,7 +46,8 @@ Step‑by‑step setup guides per client:
 ## Prerequisites
 
 - Node.js 18+
-- A Gambot Token (`gmbt_…`) from the Gambot admin panel → **Settings → General**.
+- **No account yet?** You need **nothing** — start the server *without* a token and it runs in [token‑less onboarding mode](#no-token-yet-tokenless-onboarding-mode) to create your Gambot account from scratch.
+- **Already have an account?** A Gambot Token (`gmbt_…`) from the Gambot admin panel → **Settings → General**, to unlock the full tool set.
 
 ## Quick start (npx — recommended)
 
@@ -70,7 +73,20 @@ Optional env var `GAMBOT_API_BASE` overrides the base URL (defaults to `https://
 
 ### No token yet? Token‑less onboarding mode
 
-The Gambot token is a **result** of finishing onboarding, so the server also runs **without** `GAMBOT_TOKEN`. Started token‑less, it enters **onboarding mode** and exposes only the public self‑serve tools — create a brand‑new account (free / co‑existence / bring‑your‑own number, or buy a number after e‑mail+WhatsApp verification), open the Meta Embedded Signup link in the browser, then poll `gambot_get_onboarding_status` until WhatsApp is connected. Once connected, the customer gets their `gmbt_…` token in‑app (**Settings → General**); set `GAMBOT_TOKEN` to unlock the full tool set. (Remote/OAuth clients like Claude & ChatGPT authorize per‑session through the hosted consent page instead.)
+**You don't need a Gambot account to get started.** The token is a **result** of finishing onboarding (chicken‑and‑egg: a brand‑new org has no token yet), so the server also runs **without** `GAMBOT_TOKEN`. Just omit it — leave `env` empty:
+
+```json
+{
+  "mcpServers": {
+    "gambot": {
+      "command": "npx",
+      "args": ["-y", "gambot-mcp"]
+    }
+  }
+}
+```
+
+Started token‑less, it enters **onboarding mode** and exposes only the public self‑serve tools — create a brand‑new account (free / co‑existence / bring‑your‑own number, or buy a number after e‑mail+WhatsApp verification), open the Meta Embedded Signup link in the browser, then poll `gambot_get_onboarding_status` until WhatsApp is connected. Just tell the agent *"create a Gambot WhatsApp account for my business"* and it walks you through it. Once connected, you get your `gmbt_…` token in‑app (**Settings → General**); add `GAMBOT_TOKEN` to the `env` above to unlock the full tool set. (Remote/OAuth clients like Claude & ChatGPT authorize per‑session through the hosted consent page instead.)
 
 ## Local development (from source)
 
