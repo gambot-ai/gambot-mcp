@@ -170,7 +170,7 @@ export function renderConsentPage(fields: Record<string, string>, error?: string
       <input id="token" name="gambot_token" type="password" placeholder="gmbt_…" autocomplete="off" autofocus required/>
       <button type="submit">Authorize</button>
     </form>
-    <p class="hint">Find your token in Gambot → Settings → API, or use the secure token link your admin shared. <a href="https://gambot.co.il/developers/" target="_blank" rel="noopener">Learn more</a></p>
+    <p class="hint">Find your token in Gambot → Settings → API, or use the secure token link your admin shared. <a href="https://gambot.co.il/developers/?lang=en" target="_blank" rel="noopener">Learn more</a></p>
   </div>
 </body></html>`;
 }

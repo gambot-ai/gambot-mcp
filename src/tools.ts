@@ -1898,6 +1898,43 @@ export const TOOLS: GambotTool[] = [
     },
     run: (c, a) => c.post("/onboarding/waba/exchange-token", a),
   },
+  {
+    name: "gambot_send_onboarding_verification",
+    title: "Send onboarding verification code",
+    description:
+      "Send a 6-digit verification code to the customer's email AND WhatsApp. Public (no token). Required ONLY before creating a self-serve account that BUYS a phone number (proves the customer owns the email/phone, so we don't buy numbers for fake accounts). " +
+      "Returns { verificationId } — collect the code from the customer, then call gambot_verify_onboarding_code. Free number / co-existence / bring-your-own do NOT need this.",
+    inputSchema: {
+      email: z.string().describe("Customer email — the code is sent here."),
+      phoneNumber: z.string().describe("Customer WhatsApp number (E.164) — the code is sent here too."),
+      name: z.string().optional(),
+      companyName: z.string().optional(),
+      companyIdNumber: z.string().optional(),
+    },
+    run: (c, a) => c.post("/onboarding/verification/send", a),
+  },
+  {
+    name: "gambot_verify_onboarding_code",
+    title: "Verify onboarding code",
+    description:
+      "Verify the 6-digit code the customer received (from gambot_send_onboarding_verification). Public (no token). On success returns { verified:true }; pass the same verificationId to gambot_create_trial_account to create an account that buys a phone number.",
+    inputSchema: {
+      verificationId: z.string().describe("From gambot_send_onboarding_verification."),
+      code: z.string().describe("The 6-digit code the customer received by email/WhatsApp."),
+    },
+    run: (c, a) => c.post("/onboarding/verification/verify", a),
+  },
+  {
+    name: "gambot_get_onboarding_status",
+    title: "Get onboarding status",
+    description:
+      "Check where an organization is in onboarding: whether the account exists, a card is on file, and WhatsApp (WABA) is connected. " +
+      "Use this to POLL after create-trial (Meta Embedded Signup finishes in the browser, not in the agent). Returns " +
+      "{ accountCreated, cardOnFile, wabaConnected, status (not_found|account_created|connected), wabaConnectUrl, paymentUrl, nextStep }. " +
+      "Public — works without a token.",
+    inputSchema: { organization: z.string() },
+    run: (c, a) => c.get("/onboarding/status", { organization: a.organization }),
+  },
 
   // ── Analytics & reporting (read-only KPIs; numbers match the in-app dashboard) ────────────────
   // Period selection shared by most tools: period = today | yesterday | week | month | 30d | all
@@ -2267,4 +2304,46 @@ export const TOOLS: GambotTool[] = [
         status: a.status,
       }),
   },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// PUBLIC / TOKEN-LESS ONBOARDING SURFACE
+// The set of tools exposed when the MCP server starts WITHOUT a GAMBOT_TOKEN — the "create an account
+// from Claude with no key yet" flow. Every tool here maps to a backend endpoint marked [AllowAnonymous]
+// (create-trial-self-serve, check-organization, organization-name, payment-link, waba/connect-link,
+// status). Account creation goes through the self-serve endpoint (no key, number-purchase blocked).
+// Once WhatsApp is connected the user gets their gmbt_ token in-app and can run the full tool set.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+const _byName: Record<string, GambotTool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
+
+export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
+  _byName["gambot_check_organization"],
+  _byName["gambot_generate_organization_name"],
+  _byName["gambot_search_available_numbers"],
+  _byName["gambot_send_onboarding_verification"],
+  _byName["gambot_verify_onboarding_code"],
+  {
+    // Self-serve variant: hits the PUBLIC endpoint (no token). Free number paths need no verification;
+    // BUYING a number (simInfo.purchaseInTwilio) additionally requires a verified verificationId.
+    ..._byName["gambot_create_trial_account"],
+    description:
+      "Create a new FREE-TRIAL organization + first user with NO Gambot API key (public self-serve). " +
+      "If companyInfo.organizationName is omitted it's generated from companyInfo.companyName + companyInfo.companyIdNumber, so one call suffices. " +
+      "WhatsApp/number options: useFreeNumber (Meta test number) · useCoexisting (existing WhatsApp Business number in simInfo.simNumberEntered) · BYO SIM (the customer's own number in simInfo.simNumberEntered) · " +
+      "BUY A NUMBER from us (simInfo.purchaseInTwilio=true + simInfo.selectedSimNumber from gambot_search_available_numbers) — this LAST option requires a VERIFIED verificationId: first run gambot_send_onboarding_verification then gambot_verify_onboarding_code, and pass that verificationId here. The free options need no verification. " +
+      "GLOBAL: send companyInfo.timezone (IANA) and companyInfo.country (ISO-3166 alpha-2). " +
+      "Returns wabaConnectUrl (browser page for Meta Embedded Signup — it cannot run in the agent), paymentUrl (hosted card page) and statusUrl. " +
+      "After creating, tell the customer to open wabaConnectUrl to connect WhatsApp, then poll gambot_get_onboarding_status.",
+    inputSchema: {
+      ..._byName["gambot_create_trial_account"].inputSchema,
+      verificationId: z
+        .string()
+        .optional()
+        .describe("REQUIRED only when buying a number (simInfo.purchaseInTwilio=true): a verificationId that passed gambot_verify_onboarding_code."),
+    },
+    run: (c, a) => c.post("/onboarding/create-trial-self-serve", a),
+  },
+  _byName["gambot_create_payment_link"],
+  _byName["gambot_get_waba_connect_link"],
+  _byName["gambot_get_onboarding_status"],
 ];

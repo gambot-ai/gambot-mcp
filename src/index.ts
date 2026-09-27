@@ -5,9 +5,15 @@ import { createGambotMcpServer } from "./server.js";
 import { TOOLS } from "./tools.js";
 
 const token = process.env.GAMBOT_TOKEN;
-if (!token) {
-  console.error("[gambot-mcp] Missing GAMBOT_TOKEN environment variable.");
-  process.exit(1);
+// Token-less is supported on purpose: with no GAMBOT_TOKEN the server starts in ONBOARDING mode and
+// exposes only the public self-serve onboarding tools (create an account, then connect WhatsApp in the
+// browser). Once the customer has their gmbt_ token, set GAMBOT_TOKEN to unlock the full tool set.
+const onboardingOnly = !token;
+if (onboardingOnly) {
+  console.error(
+    "[gambot-mcp] No GAMBOT_TOKEN — starting in ONBOARDING mode (public self-serve account creation only). " +
+      "Set GAMBOT_TOKEN (Settings → General in the app) to enable the full tool set."
+  );
 }
 
 const client = new GambotClient({
@@ -15,7 +21,7 @@ const client = new GambotClient({
   baseUrl: process.env.GAMBOT_API_BASE,
 });
 
-const server = createGambotMcpServer(client);
+const server = createGambotMcpServer(client, { onboardingOnly });
 
 async function main() {
   const transport = new StdioServerTransport();

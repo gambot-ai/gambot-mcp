@@ -4,7 +4,11 @@
  */
 
 export interface GambotClientOptions {
-  token: string;
+  /**
+   * Organization Gambot token (`gmbt_…`). OPTIONAL: when omitted the client is "token-less" and can
+   * only reach the PUBLIC endpoints (self-serve onboarding). Authenticated endpoints will 401.
+   */
+  token?: string;
   baseUrl?: string;
 }
 
@@ -38,10 +42,15 @@ export class GambotClient {
   private token: string;
   private baseUrl: string;
 
-  constructor(opts: GambotClientOptions) {
-    if (!opts.token) throw new Error("GAMBOT_TOKEN is required.");
-    this.token = opts.token;
+  constructor(opts: GambotClientOptions = {}) {
+    // Token-less is allowed on purpose (public self-serve onboarding); only public endpoints work then.
+    this.token = opts.token || "";
     this.baseUrl = (opts.baseUrl || "https://api.gambot.co.il/api/v1").replace(/\/+$/, "");
+  }
+
+  /** Whether this client carries an org token (⇒ can reach authenticated endpoints). */
+  get hasToken(): boolean {
+    return !!this.token;
   }
 
   private buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -61,13 +70,14 @@ export class GambotClient {
   ): Promise<T> {
     const url = this.buildUrl(path, opts.query);
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
       Accept: "application/json",
       // Identify the caller as the MCP server so the backend labels sent messages
       // "Gambot MCP" (vs "Gambot API" for direct REST callers) in the chat.
       "X-Gambot-Client": "mcp",
       "User-Agent": "gambot-mcp",
     };
+    // Token-less clients omit auth and may only reach the public onboarding endpoints.
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
     const init: RequestInit = { method, headers };
     if (opts.body !== undefined && method !== "GET") {
       headers["Content-Type"] = "application/json";
