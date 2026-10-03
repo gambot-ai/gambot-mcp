@@ -170,7 +170,8 @@ export function renderConsentPage(fields: Record<string, string>, error?: string
       <input id="token" name="gambot_token" type="password" placeholder="gmbt_…" autocomplete="off" autofocus required/>
       <button type="submit">Authorize</button>
     </form>
-    <p class="hint">Find your token in Gambot → Settings → API, or use the secure token link your admin shared. <a href="https://gambot.co.il/developers/?lang=en" target="_blank" rel="noopener">Learn more</a></p>
+    <p class="hint">Find your token in Gambot → Settings → General, or use the secure token link your admin shared. <a href="https://gambot.co.il/developers/?lang=en" target="_blank" rel="noopener">Learn more</a></p>
+    <p class="hint"><strong>No Gambot account yet?</strong> <a href="https://gambot.co.il/OnboardingProcess/?lang=en&amp;utm_source=mcp_oauth&amp;utm_medium=consent_page" target="_blank" rel="noopener">Create a free account</a> (you connect your WhatsApp number to the official WhatsApp Business API with Meta in the browser), then copy your token from Settings → General and paste it above. Gambot is the official WhatsApp Business API, not WhatsApp Web automation.</p>
   </div>
 </body></html>`;
 }

@@ -48,6 +48,21 @@ export class GambotClient {
     this.baseUrl = (opts.baseUrl || "https://api.gambot.co.il/api/v1").replace(/\/+$/, "");
   }
 
+  private callerName = process.env.GAMBOT_SOURCE || "";
+
+  /**
+   * The MCP host that connected (from the MCP `initialize` clientInfo, e.g. "claude-code", "cursor").
+   * Sent as `X-Gambot-Mcp-Client` and merged into signup attribution so Gambot can tell which AI
+   * channel produced an account. Not a credential; contains no user data.
+   */
+  setCallerName(name: string | undefined | null) {
+    const n = (name || "").toString().trim().slice(0, 60);
+    if (n && !process.env.GAMBOT_SOURCE) this.callerName = n;
+  }
+  get caller(): string {
+    return this.callerName;
+  }
+
   /** Whether this client carries an org token (⇒ can reach authenticated endpoints). */
   get hasToken(): boolean {
     return !!this.token;
@@ -76,6 +91,7 @@ export class GambotClient {
       "X-Gambot-Client": "mcp",
       "User-Agent": "gambot-mcp",
     };
+    if (this.callerName) headers["X-Gambot-Mcp-Client"] = this.callerName;
     // Token-less clients omit auth and may only reach the public onboarding endpoints.
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
     const init: RequestInit = { method, headers };

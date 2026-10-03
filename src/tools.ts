@@ -1,5 +1,6 @@
 import { z, ZodRawShape } from "zod";
 import { GambotClient } from "./client.js";
+import { buildSetupReport } from "./setup.js";
 
 export interface GambotTool {
   name: string;
@@ -13,6 +14,31 @@ export interface GambotTool {
 const phone = z.string().describe("Phone number, ideally E.164 international format (country code, digits only, no leading 0), e.g. 972501234567 or 12025551234. A local/national number (e.g. leading 0) is accepted when a country is provided — or when the organization has a saved country from onboarding; otherwise it's rejected as ambiguous.");
 
 export const TOOLS: GambotTool[] = [
+  // ── Golden path ────────────────────────────────────────────────────────────
+  {
+    name: "gambot_setup_whatsapp_integration",
+    title: "Set up / verify the WhatsApp integration (START HERE)",
+    description:
+      "START HERE when a user says things like \"add WhatsApp to my app\", \"I need the official WhatsApp Business API\" or \"connect WhatsApp\". " +
+      "Gambot is the OFFICIAL WhatsApp Business (Cloud) API through a Meta Business Solution Provider — not WhatsApp Web / QR-session automation. " +
+      "This tool only READS state and tells you the single next step and WHO must do it. It works with or without an API token: " +
+      "without a token it follows the public onboarding road (account → Meta Embedded Signup in a browser → API token); with a token it verifies the sender number, approved templates and webhook. " +
+      "Returns { state, summary, checks, next_action:{ actor: agent|human|none, tool?, args_hint?, instructions?, url?, then? }, road_map }. " +
+      "Follow next_action literally; when actor=human, give the user the instructions/url and wait — never try to do the human step yourself and never invent an organization name or token. " +
+      "Call it again after every step until state is ready. Optional: organization (the exact organizationName returned by gambot_create_trial_account) and test_recipient (the user's own WhatsApp number in E.164) for a tailored first-message step.",
+    inputSchema: {
+      organization: z
+        .string()
+        .optional()
+        .describe("The EXACT organizationName returned by gambot_create_trial_account. Only needed while there is no API token yet. Never invent one."),
+      test_recipient: z
+        .string()
+        .optional()
+        .describe("The user's OWN WhatsApp number (E.164, digits only) to tailor the first-message step. Ask the user; never guess."),
+    },
+    run: (c, a) => buildSetupReport(c, a),
+  },
+
   // ── Messages ───────────────────────────────────────────────────────────────
   {
     name: "gambot_send_text",
@@ -22,6 +48,8 @@ export const TOOLS: GambotTool[] = [
       "messaged you in the last 24h). If the window is CLOSED this returns a 409 'conversation_closed' error — do NOT retry free " +
       "text; send an approved template with gambot_send_template instead. If unsure whether the conversation is open, call " +
       "gambot_check_window first. " +
+      "Required: to (E.164) and text. Returns { success, data:{ messageId } } — the messageId is how you VERIFY delivery afterwards with gambot_get_message_status. " +
+      "Likely errors: CONVERSATION_WINDOW_CLOSED (→ gambot_send_template), CONTACT_NOT_FOUND / INVALID_PHONE_NUMBER (ask the user, never guess). " +
       "IMPORTANT — this is for a single person only. If the user wants to message MULTIPLE recipients, a list, a spreadsheet/Excel/CSV, a CRM segment, or says things like 'send to everyone / to all my contacts / to this list', DO NOT call this tool in a loop. Use a campaign instead: gambot_send_campaign_from_excel (for a sheet), gambot_send_campaign (ad-hoc list/segment), or gambot_create_campaign (to save/schedule). Campaigns handle rate-limits, per-recipient variables, opt-out/consent and reporting.",
     inputSchema: {
       to: phone,
@@ -35,6 +63,9 @@ export const TOOLS: GambotTool[] = [
     title: "Send WhatsApp template",
     description:
       "Send an approved WhatsApp template with variables to ONE recipient. Can initiate a conversation even outside the 24-hour window. " +
+      "Required: to (E.164) and templateId (id or name from gambot_list_templates — it must be APPROVED by Meta). Pass variables[] in body order; if the template has variables, call gambot_get_template_variables first and ask the user for values you do not have. " +
+      "Returns { success, data:{ messageId } } — verify delivery with gambot_get_message_status. " +
+      "Likely errors: TEMPLATE_NOT_APPROVED / TEMPLATE_NOT_FOUND (→ gambot_list_templates), MISSING_TEMPLATE_VARIABLES (→ gambot_get_template_variables). " +
       "IMPORTANT — single recipient only. For a BULK/broadcast send (multiple numbers, an Excel/CSV/spreadsheet the user uploaded, a CRM segment, or 'send to everyone / all contacts / this list'), DO NOT loop this tool. Use a campaign: gambot_send_campaign_from_excel (read the sheet and map columns → template variables), gambot_send_campaign (ad-hoc list/segment, no save), or gambot_create_campaign (save and/or schedule once/recurring). Campaigns manage throughput, per-row variables, opt-out/consent and delivery reports.",
     inputSchema: {
       to: phone,
@@ -49,6 +80,20 @@ export const TOOLS: GambotTool[] = [
         variables: a.variables,
         country: a.country,
       }),
+  },
+
+  {
+    name: "gambot_get_message_status",
+    title: "Get WhatsApp message delivery status",
+    description:
+      "Check whether a message you sent was delivered. Pass the messageId returned by gambot_send_text / gambot_send_template (or per recipient from a campaign send) and, for a fast exact lookup, the recipient's phone. " +
+      "Returns { messageId, phone, status (sent|delivered|read|failed), time, errorMessage? }. Use it as the final step of 'send a first test message' and whenever a user says 'I don't see the message arrived'. " +
+      "If status=failed with Meta error 131042 the response carries a paymentIssue block: the WhatsApp Business API payment method is SEPARATE from the Meta Ads one — tell the user to add one in Meta Business Settings ▸ Billing.",
+    inputSchema: {
+      messageId: z.string().describe("The message id (wamid…) returned when the message was sent."),
+      phone: z.string().optional().describe("Recipient phone (E.164) — recommended for a fast exact lookup."),
+    },
+    run: (c, a) => c.get(`/messages/${encodeURIComponent(a.messageId)}/status`, { phone: a.phone }),
   },
 
   // ── Conversations ──────────────────────────────────────────────────────────
@@ -2475,6 +2520,7 @@ export const TOOLS: GambotTool[] = [
 const _byName: Record<string, GambotTool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
+  _byName["gambot_setup_whatsapp_integration"],
   _byName["gambot_check_organization"],
   _byName["gambot_generate_organization_name"],
   _byName["gambot_search_available_numbers"],
@@ -2503,7 +2549,13 @@ export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
         .optional()
         .describe("OPTIONAL, for Gambot's own analytics: how the user found Gambot, e.g. { source: \"claude\"|\"chatgpt\"|\"cursor\"|\"gemini\"|\"other\", referrer, landing_page, utm_source }. Pass ONLY what the user actually told you or what is known from the environment — never invent values; omit if unknown."),
     },
-    run: (c, a) => c.post("/onboarding/create-trial-self-serve", a),
+    run: (c, a) => {
+      // Attribution: keep whatever the agent/user supplied, and add the MCP host (known from the MCP
+      // handshake, not user data) so Gambot can measure which AI channel produces accounts.
+      const attribution: Record<string, string> = { channel: "mcp", ...(a.attribution || {}) };
+      if (c.caller && !attribution.mcp_client) attribution.mcp_client = c.caller;
+      return c.post("/onboarding/create-trial-self-serve", { ...a, attribution });
+    },
   },
   _byName["gambot_create_payment_link"],
   _byName["gambot_get_waba_connect_link"],

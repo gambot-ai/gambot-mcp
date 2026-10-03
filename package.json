@@ -1,7 +1,7 @@
 {
   "name": "gambot-mcp",
-  "version": "1.7.0",
-  "description": "Model Context Protocol (MCP) server for the Gambot WhatsApp Business API — send messages & templates, manage contacts, leads, cases, tasks, quotes, invoices, orders, forms, signatures, documents, campaigns and users.",
+  "version": "1.8.0",
+  "description": "Official WhatsApp Business API MCP server for AI agents. Send messages and templates, receive webhooks, and manage contacts, CRM and bots through the official WhatsApp Cloud API (Meta Business Solution Provider) - no WhatsApp Web, no QR sessions.",
   "mcpName": "io.github.gambot-ai/gambot-mcp",
   "type": "module",
   "bin": {
@@ -10,7 +10,10 @@
   },
   "main": "dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "skills",
+    "examples",
+    "docs"
   ],
   "scripts": {
     "build": "tsc",
@@ -22,22 +25,32 @@
   },
   "keywords": [
     "mcp",
-    "model-context-protocol",
     "mcp-server",
-    "gambot",
+    "model-context-protocol",
     "whatsapp",
+    "whatsapp-mcp",
     "whatsapp-api",
     "whatsapp-business-api",
-    "whatsapp-mcp",
     "whatsapp-cloud-api",
-    "crm",
+    "official-whatsapp-api",
+    "whatsapp-webhooks",
+    "whatsapp-templates",
+    "whatsapp-chatbot",
+    "ai-agents",
     "ai-agent",
+    "agent-skills",
     "claude",
+    "claude-code",
+    "cursor",
+    "codex",
     "chatgpt",
     "gemini",
-    "cursor"
+    "copilot",
+    "windsurf",
+    "gambot",
+    "crm"
   ],
-  "homepage": "https://gambot.co.il/developers/",
+  "homepage": "https://gambot.co.il/whatsapp-mcp/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gambot-ai/gambot-mcp.git"

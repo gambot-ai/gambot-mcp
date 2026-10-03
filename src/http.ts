@@ -25,7 +25,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { GambotClient } from "./client.js";
-import { createGambotMcpServer } from "./server.js";
+import { createGambotMcpServer, SERVER_VERSION } from "./server.js";
 import { TOOLS } from "./tools.js";
 import {
   GambotOAuthProvider,
@@ -123,11 +123,42 @@ app.post("/authorize/submit", async (req: Request, res: Response) => {
 
 // Liveness/readiness probe (Azure health check, uptime monitors, etc.).
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "gambot-mcp", version: "1.0.0", tools: TOOLS.length, sessions: transports.size });
+  res.json({ ok: true, service: "gambot-mcp", version: SERVER_VERSION, tools: TOOLS.length, sessions: transports.size });
 });
 
-// POST /mcp — initialize a new session or drive an existing one.
-app.post("/mcp", async (req: Request, res: Response): Promise<void> => {
+// Machine-readable index of this server for agents/humans that open the root URL.
+app.get("/", (_req, res) => {
+  res.json({
+    name: "Gambot — Official WhatsApp Business API MCP server",
+    description:
+      "Official WhatsApp Business (Cloud) API for AI agents via a Meta Business Solution Provider. Not WhatsApp Web / QR automation.",
+    version: SERVER_VERSION,
+    endpoints: {
+      mcp: `${PUBLIC_BASE_URL}/mcp`,
+      mcp_auth: "OAuth 2.0 (PKCE + dynamic client registration) or Authorization: Bearer gmbt_…",
+      mcp_onboarding: `${PUBLIC_BASE_URL}/mcp/onboarding`,
+      mcp_onboarding_auth: "none — create a Gambot account from scratch (account → Meta Embedded Signup → API token)",
+      oauth_authorization_server: `${PUBLIC_BASE_URL}/.well-known/oauth-authorization-server`,
+      oauth_protected_resource: `${PUBLIC_BASE_URL}/.well-known/oauth-protected-resource/mcp`,
+      health: `${PUBLIC_BASE_URL}/health`,
+    },
+    start_here: "Call the tool gambot_setup_whatsapp_integration — it returns the single next step.",
+    local_stdio: "npx -y gambot-mcp",
+    docs: "https://gambot.co.il/whatsapp-mcp/",
+    llms: "https://gambot.co.il/llms.txt",
+    source: "https://github.com/gambot-ai/gambot-mcp",
+    skill: "https://github.com/gambot-ai/gambot-mcp/tree/main/skills/gambot-whatsapp",
+  });
+});
+
+/**
+ * POST handler for the MCP endpoints.
+ *  • /mcp            — authenticated (OAuth or bearer): the full tool set for the caller's organization.
+ *  • /mcp/onboarding — NO auth: only the public self-serve onboarding tools (create an account, get the
+ *    Meta Embedded Signup link, poll status). It lets an agent that has no Gambot account yet start from
+ *    the hosted URL; the API token is a RESULT of onboarding, never an input here.
+ */
+const makeMcpPostHandler = (onboarding: boolean) => async (req: Request, res: Response): Promise<void> => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
   // Existing session: route to its transport (auth already bound at init).
@@ -138,8 +169,8 @@ app.post("/mcp", async (req: Request, res: Response): Promise<void> => {
 
   // New session: only valid on an `initialize` request, and must be authed.
   if (!sessionId && isInitializeRequest(req.body)) {
-    const gambotToken = resolveGambotToken(req);
-    if (!gambotToken) {
+    const gambotToken = onboarding ? undefined : resolveGambotToken(req);
+    if (!onboarding && !gambotToken) {
       unauthorized(res, "Authentication required. Connect with OAuth or send Authorization: Bearer gmbt_…");
       return;
     }
@@ -154,7 +185,9 @@ app.post("/mcp", async (req: Request, res: Response): Promise<void> => {
       if (transport.sessionId) transports.delete(transport.sessionId);
     };
 
-    const server = createGambotMcpServer(new GambotClient({ token: gambotToken, baseUrl: API_BASE }));
+    const server = createGambotMcpServer(new GambotClient({ token: gambotToken, baseUrl: API_BASE }), {
+      onboardingOnly: onboarding,
+    });
     try {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
@@ -167,7 +200,9 @@ app.post("/mcp", async (req: Request, res: Response): Promise<void> => {
 
   // Anything else: bad request.
   jsonRpcError(res, 400, -32000, "Bad Request: missing or invalid mcp-session-id (send an initialize request first).");
-});
+};
+app.post("/mcp", makeMcpPostHandler(false));
+app.post("/mcp/onboarding", makeMcpPostHandler(true));
 
 // GET /mcp — server→client SSE stream for an existing session.
 // DELETE /mcp — explicit session termination.
@@ -181,6 +216,8 @@ async function handleSessionRequest(req: Request, res: Response): Promise<void> 
 }
 app.get("/mcp", handleSessionRequest);
 app.delete("/mcp", handleSessionRequest);
+app.get("/mcp/onboarding", handleSessionRequest);
+app.delete("/mcp/onboarding", handleSessionRequest);
 
 app.listen(PORT, () => {
   console.error(`[gambot-mcp] remote HTTP server on :${PORT} — /mcp (${TOOLS.length} tools), OAuth issuer ${PUBLIC_BASE_URL}`);

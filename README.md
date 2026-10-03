@@ -1,16 +1,104 @@
-# Gambot MCP Server — WhatsApp API for AI agents
+# Gambot — Official WhatsApp Business API for AI Agents (MCP + REST API)
 
 [![npm](https://img.shields.io/npm/v/gambot-mcp)](https://www.npmjs.com/package/gambot-mcp)
 [![MCP Registry](https://img.shields.io/badge/MCP-Registry-blue)](https://registry.modelcontextprotocol.io)
+[![Agent Skill](https://img.shields.io/badge/Agent%20Skill-gambot--whatsapp-purple)](./skills/gambot-whatsapp/SKILL.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-Connect **WhatsApp** to **Claude, ChatGPT, Gemini and Cursor**. This is a [Model Context Protocol](https://modelcontextprotocol.io) server for the **Gambot WhatsApp Business API** (an official, Meta‑approved WhatsApp Business Solution Provider). It lets any MCP‑compatible client drive your Gambot account through tools — send WhatsApp messages & templates, run marketing campaigns, and manage contacts, leads, cases, tasks, quotes, invoices, orders, forms, signatures, document templates and users.
+**Gambot gives AI agents and developers the *official* WhatsApp Business (Cloud) API** — through a [Model Context Protocol](https://modelcontextprotocol.io) server and a REST API. Gambot is a Meta Business Solution Provider.
 
-**One-click install (Cursor):** [➕ Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=gambot&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImdhbWJvdC1tY3AiXSwiZW52Ijp7IkdBTUJPVF9UT0tFTiI6IiJ9fQ==) — then paste your Gambot token into the server's `env`.
+- **Official API, not WhatsApp Web automation.** No QR codes, no linked personal sessions, no headless browsers. Real business accounts, approved templates, Meta-backed delivery.
+- **Two ways to connect.** Local: `npx -y gambot-mcp`. Hosted: `https://gambot-mcp.azurewebsites.net/mcp` (Streamable HTTP, OAuth 2.0 or token).
+- **Built for agents.** Machine-readable states and errors (`error_code`, `can_recover`, `recommended_action`, `required_tool`, `template_required`), one start-here tool (`gambot_setup_whatsapp_integration`), 24-hour-window and template guidance built in.
+- **No account yet? Start anyway.** The agent can create a Gambot account itself (no API key needed); the only human step is the Meta WhatsApp connection in a browser.
 
-> **No Gambot account yet?** Install exactly the same way but **leave the token empty** — the server starts in **token‑less onboarding mode** and the agent creates your WhatsApp Business account from scratch. See [Token‑less onboarding mode](#no-token-yet-tokenless-onboarding-mode).
+> **Using an AI coding agent?** Install the Agent Skill, then ask: *"Add the official WhatsApp API to this app."*
+> ```bash
+> npx skills add gambot-ai/gambot-mcp --skill gambot-whatsapp
+> ```
+> The skill ([`skills/gambot-whatsapp`](./skills/gambot-whatsapp/SKILL.md)) teaches the agent the whole path: account → Meta onboarding → auth → first message → templates → webhooks → error recovery.
 
-It wraps the public REST API at `https://api.gambot.co.il/api/v1`, authenticated with your organization's **Gambot Token**. MCP is an AI‑facing **interface** over Gambot — it uses the same business logic as the REST API, and is **not** a separate backend.
+## Quick start
+
+**1. Add the MCP server** (works in Claude Code, Claude Desktop, Cursor, Codex, Gemini CLI, VS Code/Copilot, Windsurf):
+
+```json
+{
+  "mcpServers": {
+    "gambot": { "command": "npx", "args": ["-y", "gambot-mcp"] }
+  }
+}
+```
+
+No token is needed to begin. Without `GAMBOT_TOKEN` the server runs in onboarding mode and creates your account.
+
+| Client | Command / config |
+|---|---|
+| Claude Code | `claude mcp add gambot -- npx -y gambot-mcp` or hosted: `claude mcp add --transport http gambot https://gambot-mcp.azurewebsites.net/mcp` |
+| Cursor | [One-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=gambot&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImdhbWJvdC1tY3AiXSwiZW52Ijp7IkdBTUJPVF9UT0tFTiI6IiJ9fQ==) or `.cursor/mcp.json` |
+| Claude Desktop | `claude_desktop_config.json` (JSON above) |
+| OpenAI Codex | `~/.codex/config.toml` → `[mcp_servers.gambot]` `command = "npx"` `args = ["-y", "gambot-mcp"]` |
+| Gemini CLI | `~/.gemini/settings.json` (JSON above) |
+| VS Code / Copilot | `.vscode/mcp.json` → `{"servers":{"gambot":{"type":"http","url":"https://gambot-mcp.azurewebsites.net/mcp"}}}` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` (JSON above) |
+| ChatGPT | custom connector → `https://gambot-mcp.azurewebsites.net/mcp` (OAuth) |
+
+Per-client guides: <https://gambot.co.il/whatsapp-mcp/>.
+
+**2. Ask your agent:**
+
+> "Set up WhatsApp for my app with Gambot and send a test message to my number."
+
+The agent calls `gambot_setup_whatsapp_integration`, which returns the current state and **one** next step — and tells it whether the *agent* or the *human* must do it:
+
+| State | What happens |
+|---|---|
+| `no_account_known` / `account_missing` | Agent creates the account (`gambot_create_trial_account`, no API key) |
+| `awaiting_whatsapp_connection` | **Human** opens the Meta Embedded Signup link in a browser (cannot run inside an agent) |
+| `whatsapp_connected_needs_token` | **Human** signs in with OAuth (hosted MCP) or copies the token from *Settings → General* into `GAMBOT_TOKEN` |
+| `ready_needs_template` | Agent creates a template (Meta approval) |
+| `ready_to_send_first_message` / `ready` | Agent sends a test message and confirms delivery |
+
+## Authentication
+
+Prefer **OAuth** (hosted MCP: `https://gambot-mcp.azurewebsites.net/mcp` — PKCE + dynamic client registration; no secret is pasted into config). Alternatively use your Gambot token (`gmbt_…`, *Settings → General*) as `GAMBOT_TOKEN` (local) or `Authorization: Bearer gmbt_…` (hosted / REST). Never paste a token into a chat. No account yet? <https://gambot.co.il/OnboardingProcess/>.
+
+## Minimal working example (REST, any language)
+
+```bash
+export GAMBOT_TOKEN=gmbt_...        # from Settings → General; keep it secret
+
+# Is free text allowed? (the 24-hour customer-service window)
+curl -s https://api.gambot.co.il/api/v1/conversations/12025550123/window -H "Authorization: Bearer $GAMBOT_TOKEN"
+
+# Window open → send text
+curl -s -X POST https://api.gambot.co.il/api/v1/messages/send-text \
+  -H "Authorization: Bearer $GAMBOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{"to":"12025550123","text":"Hello from Gambot"}'
+
+# Window closed → send an approved template
+curl -s -X POST https://api.gambot.co.il/api/v1/messages/send-template \
+  -H "Authorization: Bearer $GAMBOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{"to":"12025550123","templateId":"hello_world_0626","variables":["there"]}'
+```
+
+Runnable examples (send message, send template, receive webhook, delivery status) for **Node/TypeScript, Python, Next.js and Laravel/PHP**: [`examples/`](./examples).
+
+## Official API vs WhatsApp Web automation
+
+| | Gambot (official WhatsApp Business API) | WhatsApp Web / QR-session automation |
+|---|---|---|
+| Architecture | Meta Cloud API via a Business Solution Provider | A browser or linked-device session driven by a script |
+| Authentication | API token / OAuth, scoped per organization | A QR code scanned from a phone; session can expire |
+| Meta relationship | Authorized provider, business-verified WABA | None |
+| Production use | Designed for it | Fragile; sessions drop, accounts can be blocked |
+| Business rules | 24-hour window, approved templates, opt-in, quality ratings | Not enforced, so easy to violate |
+| Webhooks | Managed inbound events, delivery receipts | Depends on the library |
+| Scaling | Messaging tiers, multiple numbers, campaigns | One linked phone |
+
+Use the official API for anything customer-facing. More: <https://gambot.co.il/whatsapp-mcp-vs-whatsapp-web/>.
+
+It wraps the public REST API at `https://api.gambot.co.il/api/v1`. MCP is an AI-facing **interface** over Gambot — it uses the same business logic as the REST API and is **not** a separate backend.
 
 ## Why Gambot instead of building on Meta's Cloud API directly
 
@@ -51,7 +139,7 @@ Step‑by‑step setup guides per client:
 
 ## Quick start (npx — recommended)
 
-Once published to npm, no clone or build is needed — MCP clients run it on demand with `npx`.
+No clone or build is needed — MCP clients run it on demand with `npx`.
 
 ### Cursor (`.cursor/mcp.json`) / Claude Desktop (`claude_desktop_config.json`)
 
@@ -115,7 +203,8 @@ Then point your MCP client at the built entrypoint:
 
 | Group | Tools |
 |-------|-------|
-| Messages | `gambot_send_text`, `gambot_send_template` |
+| Start here | `gambot_setup_whatsapp_integration` (state + the single next step; works with or without a token) |
+| Messages | `gambot_send_text`, `gambot_send_template`, `gambot_get_message_status` (delivery status by `messageId`) |
 | Conversations | `gambot_list_conversations` (the conversation/contact LIST — who, with last-message metadata only), `gambot_get_conversation_messages` (full message history of ONE conversation), `gambot_analytics_transcript` (message CONTENT across ALL conversations for a period — for "how did my team reply today / which customers were upset"), `gambot_check_window` (is the 24h window open? → free text vs template), `gambot_list_numbers` (sender numbers for multi-number orgs) |
 | Templates | `gambot_list_templates`, `gambot_get_template`, `gambot_get_template_variables`, `gambot_create_template` (text/media header, body variables, footer, buttons), `gambot_upload_template_media` |
 | Contacts | `gambot_get_contact_fields`, `gambot_create_contact`, `gambot_list_contacts` (list/search the whole contacts directory — by name/phone/email, tag, conversation status/category or owner), `gambot_get_contact`, `gambot_update_contact` (base + `customFields`), `gambot_list_ctwa_contacts` (contacts created from a Click-to-WhatsApp ad, with the originating ad info), `gambot_bulk_update_contacts` (**update MANY at once** by filter/phones — tags, owner, category, consent, custom fields; **preview → confirm** and stamps an audit note) |
@@ -174,21 +263,23 @@ A conversational bot in Gambot is usually a **package** of botomations that were
 
 Gambot MCP is designed so an AI agent can **understand what happened and what to do next** — it interprets the API's structured business state and returns actionable guidance.
 
-- **Structured errors.** On an API error the tool result is JSON with a stable machine‑readable `code`, the human `message`, the API's `data` (state flags), and — when recoverable — a `recommendedAction` naming a **real tool**. Example:
+- **Structured errors.** On an API error the tool result is JSON with stable machine-readable fields an agent can act on without parsing prose: `error_code`, `reason`, `can_recover` (can the *agent* fix it, or does a *human* have to?), `recommended_action`, `required_tool` (a real tool name), `relevant_contact`, `template_required`, plus the API's own `data`. Example:
 
   ```json
   {
     "status": "action_required",
-    "code": "CONVERSATION_WINDOW_CLOSED",
-    "message": "A free-form WhatsApp message cannot currently be sent.",
-    "data": { "canSendFreeText": false, "canSendTemplate": true },
-    "recommendedAction": {
-      "tool": "gambot_send_template",
-      "reason": "The 24-hour window is closed; send an approved template. List options with gambot_list_templates."
-    }
+    "error_code": "CONVERSATION_WINDOW_CLOSED",
+    "reason": "The 24-hour customer-service window is closed, so free text cannot be delivered. Send an approved template…",
+    "can_recover": true,
+    "recommended_action": "Call gambot_send_template. …",
+    "required_tool": "gambot_send_template",
+    "relevant_contact": "12025550123",
+    "template_required": true,
+    "data": { "canSendFreeText": false, "canSendTemplate": true }
   }
   ```
 
+  (Legacy fields `code`, `message` and `recommendedAction` are still returned for existing clients. Human-only problems such as a revoked token or missing billing return `can_recover: false`.)
 - **Common recoveries.** `CONVERSATION_WINDOW_CLOSED` / `TEMPLATE_REQUIRED` → `gambot_send_template`; `MISSING_TEMPLATE_VARIABLES` → `gambot_get_template_variables` (then ask the user); `CONTACT_NOT_FOUND` → `gambot_list_contacts` (never guess a recipient); `RATE_LIMITED` / messaging‑limit → back off, don't loop, use a campaign for bulk.
 - **Safety.** The agent never silently picks an ambiguous recipient, and never loops single‑send tools for bulk — it's routed to campaigns.
 - **Tool annotations.** Read tools are marked read‑only/idempotent; `delete_*`, `disable_user` and `issue_invoice` are marked destructive; every tool is `openWorld` (it talks to the live WhatsApp/Gambot backend). Use these to gate confirmations for external‑communication and high‑impact actions.

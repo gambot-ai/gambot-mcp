@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.gambot-ai/gambot-mcp",
-  "title": "Gambot WhatsApp Business API",
-  "description": "Send WhatsApp messages & templates and manage CRM, leads & campaigns via the Gambot WhatsApp API.",
+  "title": "Gambot - Official WhatsApp Business API",
+  "description": "Official WhatsApp Business API MCP server for AI agents: messages, templates, webhooks, CRM.",
   "repository": {
     "url": "https://github.com/gambot-ai/gambot-mcp",
     "source": "github"
   },
-  "version": "1.7.0",
+  "version": "1.8.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "gambot-mcp",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "transport": {
         "type": "stdio"
       },
