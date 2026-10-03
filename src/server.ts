@@ -70,6 +70,21 @@ ORGANIZING CONTACTS (tags / status / category):
 - CONVERSATION CATEGORY is a SINGLE routing label per contact (gambot_list_conversation_categories / gambot_set_contact_category) —
   do not confuse it with tags (many-to-many).
 
+BULK ACTIONS — ALWAYS CONFIRM WITH THE USER FIRST, THEN RECORD THE APPROVAL:
+- Any action affecting MANY records/people — a broadcast, or gambot_bulk_update_contacts / gambot_bulk_update_leads /
+  gambot_bulk_update_tags — MUST be confirmed with the user BEFORE it runs. NEVER bulk-change or bulk-send on your own.
+- The bulk-update tools ENFORCE this: call them FIRST with confirm=false (the default) to get a PREVIEW
+  ({ requiresConfirmation:true, count, change, willAffect:[…] }) that changes NOTHING. Then tell the user, in plain language,
+  EXACTLY (a) WHO will be affected (the willAffect list + count) and (b) WHAT will change (the \`change\`), and ask them to approve.
+  ONLY after an explicit yes, re-call with confirm=true and pass \`approvedBy\` (who approved).
+- For broadcasts, the same rule applies via gambot_send_campaign's dryRun / regular_window_confirmation_required preview —
+  show audienceCount + how many won't receive it, get approval, then send.
+- AUDIT: on execution the bulk tools stamp every affected record with a timeline note "בוצע על ידי גמבוט באישור המשתמש"
+  (executed by Gambot with the user's approval) — so there is always a record of WHAT was done and THAT the user approved it.
+- Example — "update everyone created this week whose name contains לקוח, add them to דיוור":
+  gambot_bulk_update_contacts { filter:{ search:'לקוח', createdFrom:'<Monday>', createdTo:'<today>' }, fields:{ addKeys:['דיוור'] } }
+  with confirm omitted → read the returned list + change back to the user → on approval re-call the same with confirm=true, approvedBy:'<user>'.
+
 SLA / RESPONSE TIME (chats & cases):
 - CHAT SLA (message-response): who is waiting for a reply and for how long. The clock starts at the customer's last inbound
   message and stops on ANY reply (human or bot). Use gambot_list_conversation_sla (level: open=warn+breach [default], all, ok, warn,
@@ -158,6 +173,8 @@ FLOW (follow in order):
 5) After WhatsApp is connected, the customer gets their Gambot API token in the app (Settings → General). From then on they use the FULL Gambot MCP tool set (messaging, campaigns, CRM, bots, analytics) by setting GAMBOT_TOKEN.
 
 RULES:
+- ORDER IS MANDATORY: the account must be CREATED (gambot_create_trial_account) BEFORE any other onboarding step. gambot_get_waba_connect_link, gambot_create_payment_link and gambot_get_onboarding_status only work for an organization that already exists. Creating the account needs no API key and no form from the customer — just collect the details and call the tool.
+- Use ONLY the organizationName returned by gambot_create_trial_account (or gambot_check_organization). NEVER invent or guess an organization name, and never reuse an example name from documentation — a made-up name opens a page that says "Organization not found".
 - Never invent a token. These onboarding tools are unauthenticated by design.
 - Do the number choice explicitly with the customer; never guess between free/co-existence/BYO.
 - Always tell the customer the WhatsApp connection (wabaConnectUrl) must be completed in the browser.`;
@@ -195,6 +212,11 @@ const RECOVERY: Record<string, { tool?: string; reason: string }> = {
     tool: "gambot_list_contacts",
     reason:
       "No contact matched. Search with gambot_list_contacts; create it with gambot_create_contact only if appropriate. Do not message a different number.",
+  },
+  ORGANIZATION_NOT_FOUND: {
+    tool: "gambot_create_trial_account",
+    reason:
+      "That organization does not exist — the account was never created (do NOT invent or reuse an example organization name). Create the account FIRST with gambot_create_trial_account (no key, no form needed), then use the organizationName / wabaConnectUrl it returns. The create call must come before any connect-link / payment-link / status step.",
   },
   INVALID_PHONE_NUMBER: {
     reason:
@@ -262,7 +284,9 @@ export function buildAgentError(err: GambotApiError): Record<string, unknown> {
  */
 export function inferAnnotations(name: string) {
   const readOnly = /^gambot_(list|get|check|analytics|search)/.test(name);
-  const destructive = /(^gambot_delete_|^gambot_disable_user$|^gambot_issue_invoice$)/.test(name);
+  // Destructive = irreversible OR mass-mutating. gambot_bulk_* change MANY records in one call, so clients
+  // should surface a confirmation prompt (a second safety net on top of the tools' own preview→confirm step).
+  const destructive = /(^gambot_delete_|^gambot_bulk_|^gambot_disable_user$|^gambot_issue_invoice$)/.test(name);
   return {
     readOnlyHint: readOnly,
     destructiveHint: destructive,

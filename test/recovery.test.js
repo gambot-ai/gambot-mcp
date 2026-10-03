@@ -58,6 +58,15 @@ test('annotations: delete/disable/issue tools are destructive', () => {
   assert.equal(inferAnnotations('gambot_issue_invoice').destructiveHint, true);
 });
 
+test('annotations: bulk update tools are destructive (mass mutation)', () => {
+  assert.equal(inferAnnotations('gambot_bulk_update_contacts').destructiveHint, true);
+  assert.equal(inferAnnotations('gambot_bulk_update_leads').destructiveHint, true);
+  assert.equal(inferAnnotations('gambot_bulk_update_tags').destructiveHint, true);
+  // read-side transaction tools stay read-only
+  assert.equal(inferAnnotations('gambot_list_transactions').readOnlyHint, true);
+  assert.equal(inferAnnotations('gambot_get_transaction').destructiveHint, false);
+});
+
 test('annotations: send tools are not read-only (external comms)', () => {
   const a = inferAnnotations('gambot_send_text');
   assert.equal(a.readOnlyHint, false);

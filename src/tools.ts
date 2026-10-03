@@ -170,6 +170,29 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/templates/${encodeURIComponent(a.templateId)}/variables`),
   },
   {
+    name: "gambot_get_template_audience",
+    title: "Segment a template's audience by button click",
+    description:
+      "Return the list of contact phone numbers for a TEMPLATE, segmented by how each contact interacted with a " +
+      "button — measured ACROSS ALL SEND SOURCES (bot flows, campaigns/broadcasts, manual agent sends, and the API/MCP). " +
+      "THIS is the tool for 'send to everyone who clicked button X on template T', 'who received T but never pressed X', " +
+      "or 'who did we send T to'. It unifies URL/CTA button clicks (tracked links) AND quick-reply button replies " +
+      "(the common bot case), so you don't have to know which send channel or button type was used.\n" +
+      "modes: 'clicked' = pressed the button; 'not_clicked' = received the template but never pressed it; " +
+      "'recipients' = everyone it was sent to. `button` is REQUIRED for clicked/not_clicked.\n" +
+      "FOLLOW-UP: pipe the returned `phoneNumbers` straight into gambot_send_campaign (recipientPhoneNumbers) to " +
+      "message that exact segment. Response also includes `counts` { recipients, clicked, notClicked }.",
+    inputSchema: {
+      templateId: z.string().describe("Template id (as returned by gambot_list_templates)."),
+      button: z.string().optional().describe("Button label to segment by. Required for mode 'clicked'/'not_clicked'."),
+      mode: z.enum(["clicked", "not_clicked", "recipients"]).optional().describe("Default 'clicked'."),
+      since: z.string().optional().describe("ISO-8601 — only count sends on/after this instant."),
+    },
+    run: (c, a) => c.get(`/templates/${encodeURIComponent(a.templateId)}/audience`, {
+      button: a.button, mode: a.mode, since: a.since,
+    }),
+  },
+  {
     name: "gambot_create_template",
     title: "Create template",
     description:
@@ -463,6 +486,70 @@ export const TOOLS: GambotTool[] = [
       c.post("/contacts/tags/bulk", { phones: a.phones, fromTag: a.fromTag, add: a.add, remove: a.remove }),
   },
   {
+    name: "gambot_bulk_update_contacts",
+    title: "Bulk update contacts (preview → confirm)",
+    description:
+      "Update MANY contacts in ONE call — e.g. 'tag every contact created this week whose name contains לקוח with דיוור', reassign an owner, set a category/consent, or write a custom field across a whole segment. " +
+      "Audience: `phones` (explicit) and/or `filter` { search, tag, status, category, ownerId, includeSpam, createdFrom, createdTo (yyyy-MM-dd, on the creation date) }. " +
+      "Change: `fields` { addKeys[], removeKeys[], ownerId, ownerName, category, consent, isSpam, customFields{} }. " +
+      "⚠️ ALWAYS TWO STEPS — CONFIRM FIRST: call with confirm=false (default) to PREVIEW; it returns { requiresConfirmation:true, count, change, willAffect:[{phoneNumber,name,createdOn}] } and changes NOTHING. Show the user that EXACT list of who will be affected AND what will change, get their explicit approval, and ONLY THEN re-call with confirm=true. " +
+      "On execution every affected contact gets a timeline note 'בוצע על ידי גמבוט באישור המשתמש' (executed by Gambot with the user's approval). Pass `approvedBy` (who approved) for the audit record.",
+    inputSchema: {
+      phones: z.array(z.string()).optional().describe("Explicit target phone numbers."),
+      filter: z
+        .object({
+          search: z.string().optional().describe("Match name/phone/email (e.g. a name like 'לקוח')."),
+          tag: z.string().optional(),
+          status: z.enum(["Open", "In Process", "Closed"]).optional(),
+          category: z.string().optional(),
+          ownerId: z.string().optional(),
+          includeSpam: z.boolean().optional(),
+          createdFrom: z.string().optional().describe("yyyy-MM-dd, inclusive (contact creation date)."),
+          createdTo: z.string().optional().describe("yyyy-MM-dd, inclusive."),
+        })
+        .optional(),
+      fields: z.object({
+        addKeys: z.array(z.string()).optional().describe("Tags to add."),
+        removeKeys: z.array(z.string()).optional().describe("Tags to remove."),
+        ownerId: z.string().optional(),
+        ownerName: z.string().optional(),
+        category: z.string().optional().describe("Conversation category ('' clears it)."),
+        consent: z.boolean().optional().describe("Marketing consent."),
+        isSpam: z.boolean().optional(),
+        customFields: z.record(z.any()).optional().describe("Custom field values to set, e.g. { city:'תל אביב' }."),
+      }),
+      confirm: z.boolean().optional().describe("Leave false/omitted to PREVIEW (no changes). Set true ONLY after the user approved the previewed list."),
+      approvedBy: z.string().optional().describe("Who approved the action (recorded in the audit note)."),
+    },
+    run: (c, a) =>
+      c.post("/contacts/bulk-update", { phones: a.phones, filter: a.filter, fields: a.fields, confirm: a.confirm, approvedBy: a.approvedBy }),
+  },
+  {
+    name: "gambot_bulk_update_leads",
+    title: "Bulk update leads (preview → confirm)",
+    description:
+      "Update MANY leads in ONE call — e.g. move a segment to a stage, change status/priority/owner, or write a custom field across many leads. " +
+      "Audience: `ids` (explicit lead ids) and/or `filter` { search, createdFrom, createdTo (yyyy-MM-dd on createdOn) }. " +
+      "Change: `fields` — any base lead field (status, stageId, priority, ownerId, ownerName, source…) plus nested customFields{} (merged, never wiped). " +
+      "⚠️ ALWAYS TWO STEPS — CONFIRM FIRST: call with confirm=false (default) to PREVIEW; it returns { requiresConfirmation:true, count, change, willAffect:[{id,title,contactName,createdOn}] } and changes NOTHING. Show the user that EXACT list + what will change, get explicit approval, then re-call with confirm=true. " +
+      "Each affected lead's contact gets a timeline note 'בוצע על ידי גמבוט באישור המשתמש'. Pass `approvedBy` for the audit record.",
+    inputSchema: {
+      ids: z.array(z.string()).optional().describe("Explicit lead ids."),
+      filter: z
+        .object({
+          search: z.string().optional().describe("Match title/contactName/contactPhone/source."),
+          createdFrom: z.string().optional().describe("yyyy-MM-dd, inclusive."),
+          createdTo: z.string().optional().describe("yyyy-MM-dd, inclusive."),
+        })
+        .optional(),
+      fields: z.record(z.any()).describe("Fields to set on each lead, e.g. { status:'...', stageId:'...', customFields:{...} }."),
+      confirm: z.boolean().optional().describe("Leave false/omitted to PREVIEW (no changes). Set true ONLY after the user approved the previewed list."),
+      approvedBy: z.string().optional().describe("Who approved the action (recorded in the audit note)."),
+    },
+    run: (c, a) =>
+      c.post("/leads/bulk-update", { ids: a.ids, filter: a.filter, fields: a.fields, confirm: a.confirm, approvedBy: a.approvedBy }),
+  },
+  {
     name: "gambot_list_conversation_categories",
     title: "List conversation categories",
     description:
@@ -732,14 +819,60 @@ export const TOOLS: GambotTool[] = [
     description:
       "Read the notes (הערות) attached to a single record. entityType is 'contact', 'lead' or 'case': " +
       "for 'contact' pass the contact's phone number as entityId; for 'lead'/'case' pass the record id. " +
-      "Returns the notes newest-first (each with note, createdOn, createdById, createdByName).",
+      "By default this follows the organization's 'Sync Notes Between Entities' setting (ON by default): a contact also returns the notes " +
+      "written on its leads and cases, and a lead/case also returns its contact's notes — exactly what the user sees in the app's timeline. " +
+      "Pass includeRelated=false to get ONLY the notes stored on that exact record. " +
+      "Returns the notes newest-first (each with id, note, createdOn, createdById, createdByName, plus the ORIGIN entityType/entityId " +
+      "the note is stored on and viaRelatedEntity=true when it came from a related record). " +
+      "To edit a note use gambot_update_note with that note's id and origin entityType/entityId.",
     inputSchema: {
       entityType: z.enum(["contact", "lead", "case"]).describe("Which record type the notes belong to."),
       entityId: z.string().describe("Contact phone number (for 'contact') or the lead/case id."),
       limit: z.number().int().max(500).optional().describe("Max notes to return (default 50)."),
+      includeRelated: z.boolean().optional().describe("Include notes of related entities (contact↔leads/cases). Default: follows the org setting (ON)."),
     },
     run: (c, a) =>
-      c.get(`/notes/${encodeURIComponent(a.entityType)}/${encodeURIComponent(a.entityId)}`, { limit: a.limit }),
+      c.get(`/notes/${encodeURIComponent(a.entityType)}/${encodeURIComponent(a.entityId)}`, {
+        limit: a.limit,
+        includeRelated: a.includeRelated,
+      }),
+  },
+  {
+    name: "gambot_add_note",
+    title: "Add a note to a contact / lead / case",
+    description:
+      "Write a note (הערה) on a contact, lead or case — the same internal timeline note a user adds in the app (NOT a WhatsApp message to the customer). " +
+      "entityType is 'contact' (entityId = the contact's phone number), 'lead' or 'case' (entityId = the record id). " +
+      "The note is stored on THAT record, shows in its timeline immediately, and — when the organization's 'Sync Notes Between Entities' setting is on (default) — " +
+      "also appears in the related records' timelines (a note on a lead shows on the lead's contact, and vice-versa). The record must already exist. " +
+      "Shown as authored by 'Gambot MCP'. Returns { id, entityType, entityId, note, createdOn }. Keep the id if you may need to edit it with gambot_update_note.",
+    inputSchema: {
+      entityType: z.enum(["contact", "lead", "case"]).describe("Which record the note is written on."),
+      entityId: z.string().describe("Contact phone number (for 'contact') or the lead/case id."),
+      note: z.string().min(1).max(10000).describe("The note text."),
+    },
+    run: (c, a) =>
+      c.post(`/notes/${encodeURIComponent(a.entityType)}/${encodeURIComponent(a.entityId)}`, { note: a.note }),
+  },
+  {
+    name: "gambot_update_note",
+    title: "Edit an existing note",
+    description:
+      "Replace the text of an existing note (הערה). Pass the note's id plus the entityType/entityId of the record the note is STORED on — " +
+      "both are returned with every note by gambot_get_entity_notes / gambot_add_note (a lead note read via its contact still reports the lead as its origin). " +
+      "Only user notes can be edited (never system events). The edit is stamped with the update time and 'Gambot MCP'. " +
+      "Returns { id, entityType, entityId, note, updatedOn }.",
+    inputSchema: {
+      entityType: z.enum(["contact", "lead", "case"]).describe("Record type the note is stored on (the note's origin)."),
+      entityId: z.string().describe("Contact phone number (for 'contact') or the lead/case id the note is stored on."),
+      noteId: z.string().describe("The note's id (from gambot_get_entity_notes / gambot_add_note)."),
+      note: z.string().min(1).max(10000).describe("The new note text (replaces the old text)."),
+    },
+    run: (c, a) =>
+      c.post(
+        `/notes/${encodeURIComponent(a.entityType)}/${encodeURIComponent(a.entityId)}/${encodeURIComponent(a.noteId)}`,
+        { note: a.note }
+      ),
   },
 
   // ── Tasks (read + update) ────────────────────────────────────────────────────
@@ -889,6 +1022,29 @@ export const TOOLS: GambotTool[] = [
     description: "Update order fields (merge).",
     inputSchema: { orderId: z.string(), fields: z.record(z.any()) },
     run: (c, a) => c.patch(`/orders/${encodeURIComponent(a.orderId)}`, a.fields),
+  },
+
+  // ── Payment transactions (עסקאות / פירוט עסקאות) ─────────────────────────────
+  {
+    name: "gambot_list_transactions",
+    title: "List payment transactions",
+    description:
+      "List payment / clearing transactions (עסקאות), newest first. Use this to answer 'what did this customer pay/owe' or to give a transaction breakdown. Each item includes amount, status (pending/paid/failed), customerName, customerPhone, description, entityType (quote/invoice/order/lead/case…), vatInclusive, amountBeforeVat, provider, paymentUrl, items[] and createdAt/paidAt. Filter by contactPhone, status or entityType.",
+    inputSchema: {
+      limit: z.number().int().max(500).optional(),
+      contactPhone: z.string().optional().describe("Filter to one customer's phone (any format)."),
+      status: z.string().optional().describe("pending | paid | failed"),
+      entityType: z.string().optional().describe("quote | invoice | order | lead | case …"),
+    },
+    run: (c, a) => c.get("/transactions", { limit: a.limit, contactPhone: a.contactPhone, status: a.status, entityType: a.entityType }),
+  },
+  {
+    name: "gambot_get_transaction",
+    title: "Get payment transaction",
+    description:
+      "Get a single payment transaction by id (Firestore document id or the provider transactionId), including the full amount breakdown (amount, amountBeforeVat, vatInclusive, discount), status, customer details, linked record and items[].",
+    inputSchema: { transactionId: z.string() },
+    run: (c, a) => c.get(`/transactions/${encodeURIComponent(a.transactionId)}`),
   },
 
   // ── E-Signature documents (read) ─────────────────────────────────────────────
@@ -1879,8 +2035,10 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_get_waba_connect_link",
     title: "Get WhatsApp (WABA) connect link",
     description:
-      "Get the hosted page URL where the customer completes Meta Embedded Signup (the Facebook popup) to connect their WhatsApp Business account.",
-    inputSchema: { organization: z.string() },
+      "Get the hosted page URL where the customer completes Meta Embedded Signup (the Facebook popup) to connect their WhatsApp Business account. " +
+      "REQUIRES AN EXISTING ACCOUNT: call gambot_create_trial_account FIRST (no key/form needed) and pass the exact organizationName it returned — never invent one (a non-existent organization is refused with ORGANIZATION_NOT_FOUND). " +
+      "The create call already returns wabaConnectUrl, so you normally don't need this tool right after creating.",
+    inputSchema: { organization: z.string().describe("The organizationName returned by gambot_create_trial_account. Must already exist.") },
     run: (c, a) => c.get("/onboarding/waba/connect-link", { organization: a.organization }),
   },
   {
@@ -2340,6 +2498,10 @@ export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
         .string()
         .optional()
         .describe("REQUIRED only when buying a number (simInfo.purchaseInTwilio=true): a verificationId that passed gambot_verify_onboarding_code."),
+      attribution: z
+        .record(z.string())
+        .optional()
+        .describe("OPTIONAL, for Gambot's own analytics: how the user found Gambot, e.g. { source: \"claude\"|\"chatgpt\"|\"cursor\"|\"gemini\"|\"other\", referrer, landing_page, utm_source }. Pass ONLY what the user actually told you or what is known from the environment — never invent values; omit if unknown."),
     },
     run: (c, a) => c.post("/onboarding/create-trial-self-serve", a),
   },
