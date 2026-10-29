@@ -130,6 +130,9 @@ export class GambotClient {
   patch<T = unknown>(path: string, body?: unknown, query?: RequestOptions["query"]) {
     return this.request<T>("PATCH", path, { body, query });
   }
+  put<T = unknown>(path: string, body?: unknown, query?: RequestOptions["query"]) {
+    return this.request<T>("PUT", path, { body, query });
+  }
   del<T = unknown>(path: string, query?: RequestOptions["query"]) {
     return this.request<T>("DELETE", path, { query });
   }

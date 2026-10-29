@@ -2,17 +2,17 @@
 
 Only real, publicly documented channels are listed. "Verified" means checked from this repo's tooling on the date shown; everything else needs a human to confirm in the directory's UI. Re-verify before each release.
 
-Last checked: 2026-10-03.
+Last checked: 2026-10-29 (re-verified from the web + registry APIs).
 
 | Directory | What it is | Status (verified) | Submission / management URL | Required metadata | Action |
 |---|---|---|---|---|---|
-| **npm** | Package registry (`npx -y gambot-mcp`) | Published, `latest` = 1.7.0 | https://www.npmjs.com/package/gambot-mcp | name, description, keywords, repository, homepage, bugs, license (all in `package.json`) | `npm publish --access public` for 1.8.0 |
-| **Official MCP Registry** | Canonical MCP server index | Listed as `io.github.gambot-ai/gambot-mcp`; `latest` = **1.6.1** (1.7.0 and 1.8.0 not yet published) | https://registry.modelcontextprotocol.io (`GET /v0/servers?search=gambot`) | `server.json` (name, ≤100-char description, version, npm package, env vars) | Log in as the `gambot-ai` GitHub user: `mcp-publisher login github` then `mcp-publisher publish` |
-| **GitHub** | Source + discovery via topics and README | Repo public: https://github.com/gambot-ai/gambot-mcp | Repo → About (gear icon) | description, homepage, topics | See "GitHub About" below (needs a `gambot-ai` admin; the CLI account used here has no access) |
-| **Glama** | MCP server directory with quality scoring | A page exists at https://glama.ai/mcp/servers/gambot-ai/gambot-mcp (auto-indexed) | https://glama.ai/mcp/servers | claim the listing as maintainer; add `glama.json` if prompted | Claim and review the scan result; confirm description/tools |
+| **npm** | Package registry (`npx -y gambot-mcp`) | Published, `latest` = 1.9.1 (published 2026-10-29; ~750 downloads last month, ~10/day) | https://www.npmjs.com/package/gambot-mcp | name, description, keywords, repository, homepage, bugs, license (all in `package.json`) | `npm publish --access public` |
+| **Official MCP Registry** | Canonical MCP server index | Listed as `io.github.gambot-ai/gambot-mcp`; `latest` = **1.6.1** (STALE: 1.7.0, 1.8.0, 1.9.0 not published; third-party mirrors such as agent-ready-directory.com copy this old entry) | https://registry.modelcontextprotocol.io (`GET /v0/servers?search=gambot`) | `server.json` (name, ≤100-char description, version, npm package, env vars) | Log in as the `gambot-ai` GitHub user: `mcp-publisher login github` then `mcp-publisher publish` |
+| **GitHub** | Source + discovery via topics and README | Repo public, 2 stars / 0 forks; last push 2026-10-03; homepage still /developers/ and topics/description NOT updated; ~1,000 lines of 1.9.0 changes uncommitted | Repo → About (gear icon) | description, homepage, topics | See "GitHub About" below (needs a `gambot-ai` admin; the CLI account used here has no access) |
+| **Glama** | MCP server directory with quality scoring | Listed and indexed (page live, 200). Maintainer claim still to confirm | https://glama.ai/mcp/servers | claim the listing as maintainer; add `glama.json` if prompted | Claim and review the scan result; confirm description/tools |
 | **Smithery** | Hosted MCP directory | `smithery.yaml` is in the repo; the directory URL redirects (308), so listing not confirmed | https://smithery.ai/new | GitHub repo + `smithery.yaml` | Sign in, deploy from the repo, confirm it lists |
 | **PulseMCP** | MCP directory (ingests the official registry) | Not confirmed (page returned 403 to automated checks) | https://www.pulsemcp.com/submit | server name, repo URL | Check manually; it normally picks up registry entries after the registry is current |
-| **mcp.so** | MCP directory | Not found at the guessed URL | https://mcp.so (Submit) | repo URL, description | Submit manually |
+| **mcp.so** | MCP directory | Listed: https://mcp.so/servers/gambot ("Verified Featured"); description is the old GitHub one | https://mcp.so (Submit) | repo URL, description | Submit manually |
 | **Cursor Directory** | Community directory of Cursor MCP/rules | Not verified | https://cursor.directory (MCP section → submit) | name, description, install config | Submit manually |
 | **Agent Skills** | Skill discovery (`npx skills add owner/repo`) | Skill is in the repo at `skills/gambot-whatsapp`; becomes installable once pushed to `main` | https://agentskills.io (spec) | `SKILL.md` with `name` + `description` | After push: run `npx skills add gambot-ai/gambot-mcp --skill gambot-whatsapp` in a scratch dir to verify |
 | **Claude connectors / OpenAI ChatGPT apps** | First-party directories for remote MCP servers | Not submitted | See each vendor's current developer docs (the process changes; do not rely on a cached URL) | hosted `/mcp` URL, OAuth metadata, privacy policy, support contact, icon | Decide whether to apply; prerequisite: hosted `/mcp` + OAuth already exist |
@@ -21,7 +21,7 @@ Last checked: 2026-10-03.
 
 - **Name**: Gambot — Official WhatsApp Business API
 - **One-liner (≤100 chars)**: Official WhatsApp Business API MCP server for AI agents: messages, templates, webhooks, CRM.
-- **Description**: Official WhatsApp Business (Cloud) API for AI agents via a Meta Business Solution Provider. MCP + REST API. Not WhatsApp Web / QR automation. Local `npx -y gambot-mcp` or hosted `https://gambot-mcp.azurewebsites.net/mcp` (OAuth).
+- **Description**: Official WhatsApp Business (Cloud) API for AI agents via a Meta Business Solution Provider. MCP + REST API. Not WhatsApp Web / QR automation. Local `npx -y gambot-mcp` or hosted `https://mcp.gambot.co.il/mcp` (OAuth).
 - **Homepage**: https://gambot.co.il/whatsapp-mcp/
 - **Repository**: https://github.com/gambot-ai/gambot-mcp
 - **Assets**: logo/icon square PNG (≥ 512×512) — *not in this repo yet; add `assets/icon.png` before submitting to directories that require one.*

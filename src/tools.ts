@@ -11,20 +11,29 @@ export interface GambotTool {
 }
 
 // Common field helpers
-const phone = z.string().describe("Phone number, ideally E.164 international format (country code, digits only, no leading 0), e.g. 972501234567 or 12025551234. A local/national number (e.g. leading 0) is accepted when a country is provided — or when the organization has a saved country from onboarding; otherwise it's rejected as ambiguous.");
+const phone = z.string().describe("Phone number, ideally E.164 international format (country code, digits only, no leading 0), e.g. 972501234567 or 12025551234. A local/national number (e.g. leading 0) is accepted when a country is provided â€” or when the organization has a saved country from onboarding; otherwise it's rejected as ambiguous.");
+
+// CRM-segment audience for email campaigns (see EmailV1Controller.NormalizeContactFilters).
+const CONTACT_FILTERS_DESC =
+  "CRM segment: { logic:'AND'|'OR', filters:[…] }. Filter items: " +
+  "TAG → { filterType:'group', operator:'equals'|'notEquals', groupValue:['<tag name>'] } (names from gambot_list_tags; any of the tags matches). " +
+  "FIELD → { filterType:'contactField', fieldName:'<field key from gambot_get_contact_fields>', operator:'equals'|'notEquals'|'contains'|'notContains'|'startsWith'|'endsWith'|'isEmpty'|'isNotEmpty'|'greaterThan'|'lessThan'|'before'|'after'|…, value:'<text>' }. " +
+  "A Boolean/checkbox field uses value 'true' or 'false' ('false' also matches contacts where it was never set). " +
+  "Example (tag + not blocked): { logic:'AND', filters:[ { filterType:'group', operator:'equals', groupValue:['יסודי'] }, { filterType:'contactField', fieldName:'chsvm', operator:'equals', value:'false' } ] }. " +
+  "Invalid filters are rejected with the reason; preview the audience size with gambot_get_email_audience_preview.";
 
 export const TOOLS: GambotTool[] = [
-  // ── Golden path ────────────────────────────────────────────────────────────
+  // â”€â”€ Golden path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_setup_whatsapp_integration",
     title: "Set up / verify the WhatsApp integration (START HERE)",
     description:
       "START HERE when a user says things like \"add WhatsApp to my app\", \"I need the official WhatsApp Business API\" or \"connect WhatsApp\". " +
-      "Gambot is the OFFICIAL WhatsApp Business (Cloud) API through a Meta Business Solution Provider — not WhatsApp Web / QR-session automation. " +
+      "Gambot is the OFFICIAL WhatsApp Business (Cloud) API through a Meta Business Solution Provider â€” not WhatsApp Web / QR-session automation. " +
       "This tool only READS state and tells you the single next step and WHO must do it. It works with or without an API token: " +
-      "without a token it follows the public onboarding road (account → Meta Embedded Signup in a browser → API token); with a token it verifies the sender number, approved templates and webhook. " +
+      "without a token it follows the public onboarding road (account â†’ Meta Embedded Signup in a browser â†’ API token); with a token it verifies the sender number, approved templates and webhook. " +
       "Returns { state, summary, checks, next_action:{ actor: agent|human|none, tool?, args_hint?, instructions?, url?, then? }, road_map }. " +
-      "Follow next_action literally; when actor=human, give the user the instructions/url and wait — never try to do the human step yourself and never invent an organization name or token. " +
+      "Follow next_action literally; when actor=human, give the user the instructions/url and wait â€” never try to do the human step yourself and never invent an organization name or token. " +
       "Call it again after every step until state is ready. Optional: organization (the exact organizationName returned by gambot_create_trial_account) and test_recipient (the user's own WhatsApp number in E.164) for a tailored first-message step.",
     inputSchema: {
       organization: z
@@ -39,18 +48,18 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => buildSetupReport(c, a),
   },
 
-  // ── Messages ───────────────────────────────────────────────────────────────
+  // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_send_text",
     title: "Send WhatsApp text",
     description:
       "Send a free-text WhatsApp message to ONE recipient. Works ONLY inside the 24-hour customer-service window (the contact " +
-      "messaged you in the last 24h). If the window is CLOSED this returns a 409 'conversation_closed' error — do NOT retry free " +
+      "messaged you in the last 24h). If the window is CLOSED this returns a 409 'conversation_closed' error â€” do NOT retry free " +
       "text; send an approved template with gambot_send_template instead. If unsure whether the conversation is open, call " +
       "gambot_check_window first. " +
-      "Required: to (E.164) and text. Returns { success, data:{ messageId } } — the messageId is how you VERIFY delivery afterwards with gambot_get_message_status. " +
-      "Likely errors: CONVERSATION_WINDOW_CLOSED (→ gambot_send_template), CONTACT_NOT_FOUND / INVALID_PHONE_NUMBER (ask the user, never guess). " +
-      "IMPORTANT — this is for a single person only. If the user wants to message MULTIPLE recipients, a list, a spreadsheet/Excel/CSV, a CRM segment, or says things like 'send to everyone / to all my contacts / to this list', DO NOT call this tool in a loop. Use a campaign instead: gambot_send_campaign_from_excel (for a sheet), gambot_send_campaign (ad-hoc list/segment), or gambot_create_campaign (to save/schedule). Campaigns handle rate-limits, per-recipient variables, opt-out/consent and reporting.",
+      "Required: to (E.164) and text. Returns { success, data:{ messageId } } â€” the messageId is how you VERIFY delivery afterwards with gambot_get_message_status. " +
+      "Likely errors: CONVERSATION_WINDOW_CLOSED (â†’ gambot_send_template), CONTACT_NOT_FOUND / INVALID_PHONE_NUMBER (ask the user, never guess). " +
+      "IMPORTANT â€” this is for a single person only. If the user wants to message MULTIPLE recipients, a list, a spreadsheet/Excel/CSV, a CRM segment, or says things like 'send to everyone / to all my contacts / to this list', DO NOT call this tool in a loop. Use a campaign instead: gambot_send_campaign_from_excel (for a sheet), gambot_send_campaign (ad-hoc list/segment), or gambot_create_campaign (to save/schedule). Campaigns handle rate-limits, per-recipient variables, opt-out/consent and reporting.",
     inputSchema: {
       to: phone,
       text: z.string().describe("Message body"),
@@ -63,14 +72,15 @@ export const TOOLS: GambotTool[] = [
     title: "Send WhatsApp template",
     description:
       "Send an approved WhatsApp template with variables to ONE recipient. Can initiate a conversation even outside the 24-hour window. " +
-      "Required: to (E.164) and templateId (id or name from gambot_list_templates — it must be APPROVED by Meta). Pass variables[] in body order; if the template has variables, call gambot_get_template_variables first and ask the user for values you do not have. " +
-      "Returns { success, data:{ messageId } } — verify delivery with gambot_get_message_status. " +
-      "Likely errors: TEMPLATE_NOT_APPROVED / TEMPLATE_NOT_FOUND (→ gambot_list_templates), MISSING_TEMPLATE_VARIABLES (→ gambot_get_template_variables). " +
-      "IMPORTANT — single recipient only. For a BULK/broadcast send (multiple numbers, an Excel/CSV/spreadsheet the user uploaded, a CRM segment, or 'send to everyone / all contacts / this list'), DO NOT loop this tool. Use a campaign: gambot_send_campaign_from_excel (read the sheet and map columns → template variables), gambot_send_campaign (ad-hoc list/segment, no save), or gambot_create_campaign (save and/or schedule once/recurring). Campaigns manage throughput, per-row variables, opt-out/consent and delivery reports.",
+      "Required: to (E.164) and templateId (id or name from gambot_list_templates â€” it must be APPROVED by Meta). Pass variables[] in body order; if the template has variables, call gambot_get_template_variables first and ask the user for values you do not have. " +
+      "Returns { success, data:{ messageId } } â€” verify delivery with gambot_get_message_status. " +
+      "Likely errors: TEMPLATE_NOT_APPROVED / TEMPLATE_NOT_FOUND (â†’ gambot_list_templates), MISSING_TEMPLATE_VARIABLES (â†’ gambot_get_template_variables). " +
+      "IMPORTANT â€” single recipient only. For a BULK/broadcast send (multiple numbers, an Excel/CSV/spreadsheet the user uploaded, a CRM segment, or 'send to everyone / all contacts / this list'), DO NOT loop this tool. Use a campaign: gambot_send_campaign_from_excel (read the sheet and map columns â†’ template variables), gambot_send_campaign (ad-hoc list/segment, no save), or gambot_create_campaign (save and/or schedule once/recurring). Campaigns manage throughput, per-row variables, opt-out/consent and delivery reports.",
     inputSchema: {
       to: phone,
       templateId: z.string().describe("Template id/name"),
-      variables: z.array(z.string()).optional().describe("Body variables in order"),
+      variables: z.array(z.string()).optional().describe("Body variables in order (message body only, not the button)"),
+      buttonVariables: z.array(z.string()).optional().describe("Value(s) for a dynamic URL button (a URL ending in {{1}}) — e.g. a per-recipient link suffix. Applied to the template's first dynamic URL button. Without it the template's example value is sent."),
       country: z.string().optional().describe("ISO-3166 alpha-2 (e.g. 'US','IL') to internationalize a local/national number in `to`. Optional if the organization has a saved country (set at onboarding)."),
     },
     run: (c, a) =>
@@ -78,6 +88,7 @@ export const TOOLS: GambotTool[] = [
         to: a.to,
         templateId: a.templateId,
         variables: a.variables,
+        buttonVariables: a.buttonVariables,
         country: a.country,
       }),
   },
@@ -88,21 +99,21 @@ export const TOOLS: GambotTool[] = [
     description:
       "Check whether a message you sent was delivered. Pass the messageId returned by gambot_send_text / gambot_send_template (or per recipient from a campaign send) and, for a fast exact lookup, the recipient's phone. " +
       "Returns { messageId, phone, status (sent|delivered|read|failed), time, errorMessage? }. Use it as the final step of 'send a first test message' and whenever a user says 'I don't see the message arrived'. " +
-      "If status=failed with Meta error 131042 the response carries a paymentIssue block: the WhatsApp Business API payment method is SEPARATE from the Meta Ads one — tell the user to add one in Meta Business Settings ▸ Billing.",
+      "If status=failed with Meta error 131042 the response carries a paymentIssue block: the WhatsApp Business API payment method is SEPARATE from the Meta Ads one â€” tell the user to add one in Meta Business Settings â–¸ Billing.",
     inputSchema: {
-      messageId: z.string().describe("The message id (wamid…) returned when the message was sent."),
-      phone: z.string().optional().describe("Recipient phone (E.164) — recommended for a fast exact lookup."),
+      messageId: z.string().describe("The message id (wamidâ€¦) returned when the message was sent."),
+      phone: z.string().optional().describe("Recipient phone (E.164) â€” recommended for a fast exact lookup."),
     },
     run: (c, a) => c.get(`/messages/${encodeURIComponent(a.messageId)}/status`, { phone: a.phone }),
   },
 
-  // ── Conversations ──────────────────────────────────────────────────────────
+  // â”€â”€ Conversations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_conversations",
     title: "List conversations",
     description:
       "List the org's conversations = CONTACTS, ordered by most recent message. This returns WHO you've been talking to " +
-      "with per-contact METADATA only — name, phone, last-message time and a short last-message preview, plus status/tags/owner. " +
+      "with per-contact METADATA only â€” name, phone, last-message time and a short last-message preview, plus status/tags/owner. " +
       "It does NOT return the message history/content. To read the messages of ONE conversation use " +
       "gambot_get_conversation_messages; to read message CONTENT across ALL conversations for a period (e.g. 'today') use " +
       "gambot_analytics_transcript.",
@@ -140,14 +151,152 @@ export const TOOLS: GambotTool[] = [
       }),
   },
   {
+    name: "gambot_get_media_url",
+    title: "CHAT MEDIA: get a download link for a WhatsApp message's media",
+    description:
+      "CHAT MEDIA tool (files that came in/out through WhatsApp CONVERSATIONS) - NOT the media library; for files the organization stores on purpose use the gambot_library_* tools. " +
+      "Get a short-lived DOWNLOAD URL for a media file (image, video, audio, voice note, document, sticker) that belongs to a conversation. " +
+      "Gambot's media storage is PRIVATE: a media URL/id from the API is not directly browsable â€” exchange it here (or GET it with the same API token) to get the file. " +
+      "Two ways to identify the file: (1) mediaId â€” returned as `mediaId` on messages from gambot_get_conversation_messages (its `mediaUrl` is the same file at GET /api/v1/media/{mediaId}); " +
+      "(2) metaMediaId + from â€” the WhatsApp media id and the sender's phone from the `media[]` list of an incoming_message webhook (this also works if the file has not been stored yet â€” it is fetched from WhatsApp on demand; WhatsApp keeps media ~30 days). " +
+      "Returns { mediaId, url, expiresAt }; download `url` immediately WITHOUT any Authorization header (it is a signed link, default valid 15 minutes, max 1440 via ttlMinutes). " +
+      "Only media of YOUR organization can be fetched. Errors: not_found (wrong id, other organization, or expired at WhatsApp).",
+    inputSchema: {
+      mediaId: z.string().optional().describe("Gambot media id (`mediaId` on a message). Use this OR metaMediaId."),
+      metaMediaId: z.string().optional().describe("WhatsApp media id from the incoming_message webhook `media[].metaMediaId`. Use this OR mediaId."),
+      from: z.string().optional().describe("Sender phone (digits, E.164 without +) â€” pass it with metaMediaId so the file is stored/served from Gambot's copy."),
+      ttlMinutes: z.number().int().min(1).max(1440).optional().describe("How long the returned link stays valid (default 15)."),
+    },
+    run: (c, a) => {
+      if (a.mediaId) return c.get(`/media/${encodeURIComponent(a.mediaId)}`, { format: "json", ttlMinutes: a.ttlMinutes });
+      if (a.metaMediaId) return c.get(`/media/meta/${encodeURIComponent(a.metaMediaId)}`, { format: "json", from: a.from, ttlMinutes: a.ttlMinutes });
+      throw new Error("Provide mediaId (from a message) or metaMediaId (+ from) from an incoming_message webhook.");
+    },
+  },
+  {
+    name: "gambot_library_upload_file",
+    title: "MEDIA LIBRARY: upload a file / text (online storage)",
+    description:
+      "MEDIA LIBRARY tool (NOT chat media - for files that came through WhatsApp conversations use gambot_get_media_url). " +
+      "Store a file or a piece of TEXT in the organization's media library (the 'Media Manager' in the app) and get an ONLINE link to it. " +
+      "Use it as a place to keep and serve information that must be reachable online: a JSON config, a markdown/text note, a CSV, a price list, a PDF, an image. " +
+      "Give EXACTLY ONE source: text (plain content, e.g. JSON or markdown - set fileName like 'prices.json'), contentBase64 (binary, e.g. an image/PDF), or url (public http(s) URL that Gambot downloads and re-hosts). Max 50MB. " +
+      "Links: the result ALWAYS has permanentUrl = a link that NEVER expires (safe to put in a template, a website or a bot; it keeps working until the file is deleted). " +
+      "Pass ttlHours (1-168, i.e. up to 7 days) to ALSO get an EXPIRING signed link in `url` + expiresAt that stops working after that time; without ttlHours, `url` equals permanentUrl. " +
+      "Returns { id, mediaId, name, mimeType, fileType, size, folderId, url, permanentUrl, expiring, expiresAt }. Keep `id` to read, update or delete the file later " +
+      "(to change the content of an existing file but keep the SAME permanent link use gambot_library_update_file). Optional folderId from gambot_library_list_folders.",
+    inputSchema: {
+      text: z.string().optional().describe("Plain-text content to store (JSON, markdown, CSV, notes...). Use fileName to pick the extension/type."),
+      contentBase64: z.string().optional().describe("Base64 file content (binary files). A data: URI is accepted."),
+      url: z.string().optional().describe("Public http(s) URL to download and re-host."),
+      fileName: z.string().optional().describe("File name incl. extension, e.g. 'menu.pdf', 'config.json'. Default: derived from the url, else 'file'."),
+      contentType: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
+      folderId: z.string().optional().describe("Library folder id (gambot_library_list_folders). Default: library root."),
+      ttlHours: z.number().min(0).max(168).optional().describe("Omit/0 = permanent link only. 1-168 = also return an expiring link valid that many hours."),
+    },
+    run: (c, a) => c.post("/library/files", a),
+  },
+  {
+    name: "gambot_library_list_files",
+    title: "MEDIA LIBRARY: list stored files",
+    description:
+      "MEDIA LIBRARY tool (NOT chat media). List files stored in the media library (newest first). Filter by folderId, fileType (image|video|audio|document) or search (file-name contains). " +
+      "Each item has id, mediaId, name, mimeType, fileType, size, folderId, createdAt, permanentUrl (never expires) and url (= permanentUrl, or an expiring link when ttlHours is given). " +
+      "Returns { items, count, total, limit, offset }. For the content of a text file use gambot_library_get_file with includeContent=true.",
+    inputSchema: {
+      folderId: z.string().optional(),
+      fileType: z.enum(["image", "video", "audio", "document"]).optional(),
+      search: z.string().optional().describe("Only files whose name contains this text."),
+      limit: z.number().int().min(1).max(100).optional().describe("Default 50."),
+      offset: z.number().int().min(0).optional(),
+      ttlHours: z.number().min(0).max(168).optional().describe("Return expiring links valid this many hours (1-168). Omit = permanent links."),
+    },
+    run: (c, a) =>
+      c.get("/library/files", {
+        folderId: a.folderId,
+        fileType: a.fileType,
+        q: a.search,
+        limit: a.limit,
+        offset: a.offset,
+        ttlHours: a.ttlHours,
+      }),
+  },
+  {
+    name: "gambot_library_get_file",
+    title: "MEDIA LIBRARY: get a stored file (links + optional text content)",
+    description:
+      "MEDIA LIBRARY tool (NOT chat media - for a file from a WhatsApp conversation use gambot_get_media_url). " +
+      "Get ONE stored library file and its links by its library file `id` (from gambot_library_upload_file / gambot_library_list_files). " +
+      "Links: permanentUrl never expires; ttlHours (1-168) additionally returns an EXPIRING link in `url` + expiresAt (without it `url` = permanentUrl). " +
+      "includeContent=true also returns `content` = the file's text when it is a text-like file (text/*, JSON, XML) up to 512KB - this is how you READ back information you stored with gambot_library_upload_file. " +
+      "Larger/binary files: download permanentUrl or url (no Authorization header needed). " +
+      "Returns { id, mediaId, name, mimeType, fileType, size, url, permanentUrl, expiring, expiresAt, content? }. Errors: not_found.",
+    inputSchema: {
+      id: z.string().describe("Library file id."),
+      ttlHours: z.number().min(0).max(168).optional().describe("Omit/0 = permanent link. 1-168 = expiring link."),
+      includeContent: z.boolean().optional().describe("Return the text content of a small text file."),
+    },
+    run: (c, a) =>
+      c.get(`/library/files/${encodeURIComponent(a.id)}`, {
+        ttlHours: a.ttlHours,
+        includeContent: a.includeContent ? "true" : undefined,
+      }),
+  },
+  {
+    name: "gambot_library_update_file",
+    title: "MEDIA LIBRARY: replace a stored file's content (same link)",
+    description:
+      "MEDIA LIBRARY tool (NOT chat media). Overwrite the content of an EXISTING library file IN PLACE: the id and the permanentUrl stay the same, so everything that already points to the link now serves the new content " +
+      "(ideal for keeping an online JSON/config/price list up to date). Give new content as text, contentBase64 or url; optionally rename (fileName, display only) or change contentType. " +
+      "Returns the same shape as gambot_library_upload_file. Errors: not_found.",
+    inputSchema: {
+      id: z.string().describe("Library file id."),
+      text: z.string().optional(),
+      contentBase64: z.string().optional(),
+      url: z.string().optional(),
+      fileName: z.string().optional().describe("New display name."),
+      contentType: z.string().optional(),
+      ttlHours: z.number().min(0).max(168).optional().describe("Also return an expiring link valid this many hours."),
+    },
+    run: (c, a) => {
+      const { id, ...rest } = a;
+      return c.put(`/library/files/${encodeURIComponent(id)}`, rest);
+    },
+  },
+  {
+    name: "gambot_library_delete_file",
+    title: "MEDIA LIBRARY: delete a stored file",
+    description:
+      "MEDIA LIBRARY tool (NOT chat media). Permanently delete a library file: the record AND the stored file, so its permanentUrl and any expiring links stop working. Irreversible - confirm with the user first.",
+    inputSchema: { id: z.string().describe("Library file id.") },
+    run: (c, a) => c.del(`/library/files/${encodeURIComponent(a.id)}`),
+  },
+  {
+    name: "gambot_library_list_folders",
+    title: "MEDIA LIBRARY: list folders",
+    description: "MEDIA LIBRARY tool (NOT chat media). List the media library folders. Returns { items:[ { id, name, parentId, createdAt } ], count }. Use an id as folderId in gambot_library_upload_file / gambot_library_list_files.",
+    inputSchema: {},
+    run: (c) => c.get("/library/folders"),
+  },
+  {
+    name: "gambot_library_create_folder",
+    title: "MEDIA LIBRARY: create a folder",
+    description: "MEDIA LIBRARY tool (NOT chat media). Create a folder in the media library (optionally inside parentId). Returns { id, name, parentId }.",
+    inputSchema: {
+      name: z.string(),
+      parentId: z.string().optional().describe("Parent folder id; omit for the library root."),
+    },
+    run: (c, a) => c.post("/library/folders", { name: a.name, parentId: a.parentId }),
+  },
+  {
     name: "gambot_check_window",
     title: "Check 24h messaging window",
     description:
       "Check whether the 24-hour WhatsApp customer-service window is OPEN for a contact BEFORE you message them. " +
       "WhatsApp only allows free text while the window is open (i.e. the contact messaged you in the last 24h); once it's " +
       "CLOSED you MUST use an approved template. Call this whenever you're about to send a one-off message and aren't sure " +
-      "the conversation is active — then route accordingly: windowOpen=true → gambot_send_text (or a template); " +
-      "windowOpen=false → gambot_send_template (list options with gambot_list_templates). " +
+      "the conversation is active â€” then route accordingly: windowOpen=true â†’ gambot_send_text (or a template); " +
+      "windowOpen=false â†’ gambot_send_template (list options with gambot_list_templates). " +
       "Returns { phone, windowOpen, canSendFreeText, requiresTemplate, reason, recommendation, defaultTemplateId }.",
     inputSchema: { phone },
     run: (c, a) => c.get(`/conversations/${encodeURIComponent(a.phone)}/window`),
@@ -169,7 +318,7 @@ export const TOOLS: GambotTool[] = [
     description:
       "List WhatsApp conversations ranked by how long the customer has been WAITING for a reply (the message-response / chat SLA). " +
       "The clock starts at the customer's last inbound message and stops on ANY reply (human or bot). Levels come from the org's " +
-      "settings: 'warn' (amber) and 'breach' (red), and — when business hours are enabled — only working time is counted. " +
+      "settings: 'warn' (amber) and 'breach' (red), and â€” when business hours are enabled â€” only working time is counted. " +
       "Use this to answer 'who is waiting / which chats breached SLA / who hasn't been answered'. " +
       "level: open (default = warn+breach, the actionable ones) | all | ok | warn | breach. " +
       "Returns { level, config:{ warnMinutes, breachMinutes, statuses, businessHoursEnabled }, count, total, items:[ { phone, name, " +
@@ -192,7 +341,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/conversations/${encodeURIComponent(a.phone)}/sla`),
   },
 
-  // ── Templates ──────────────────────────────────────────────────────────────
+  // â”€â”€ Templates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_templates",
     title: "List templates",
@@ -219,7 +368,7 @@ export const TOOLS: GambotTool[] = [
     title: "Segment a template's audience by button click",
     description:
       "Return the list of contact phone numbers for a TEMPLATE, segmented by how each contact interacted with a " +
-      "button — measured ACROSS ALL SEND SOURCES (bot flows, campaigns/broadcasts, manual agent sends, and the API/MCP). " +
+      "button â€” measured ACROSS ALL SEND SOURCES (bot flows, campaigns/broadcasts, manual agent sends, and the API/MCP). " +
       "THIS is the tool for 'send to everyone who clicked button X on template T', 'who received T but never pressed X', " +
       "or 'who did we send T to'. It unifies URL/CTA button clicks (tracked links) AND quick-reply button replies " +
       "(the common bot case), so you don't have to know which send channel or button type was used.\n" +
@@ -231,7 +380,7 @@ export const TOOLS: GambotTool[] = [
       templateId: z.string().describe("Template id (as returned by gambot_list_templates)."),
       button: z.string().optional().describe("Button label to segment by. Required for mode 'clicked'/'not_clicked'."),
       mode: z.enum(["clicked", "not_clicked", "recipients"]).optional().describe("Default 'clicked'."),
-      since: z.string().optional().describe("ISO-8601 — only count sends on/after this instant."),
+      since: z.string().optional().describe("ISO-8601 â€” only count sends on/after this instant."),
     },
     run: (c, a) => c.get(`/templates/${encodeURIComponent(a.templateId)}/audience`, {
       button: a.button, mode: a.mode, since: a.since,
@@ -246,18 +395,18 @@ export const TOOLS: GambotTool[] = [
       "a FOOTER, and BUTTONS (QUICK_REPLY / URL / PHONE_NUMBER). " +
       "For a media header you can either put example.header_handle on the HEADER component yourself (upload it first with " +
       "gambot_upload_template_media), or simply pass headerMediaUrl (a public URL) and let Gambot upload it and inject the handle. " +
-      "── SMART GUIDANCE — Gambot enriches your template automatically, so lean on it: " +
+      "â”€â”€ SMART GUIDANCE â€” Gambot enriches your template automatically, so lean on it: " +
       "(1) LINK BUTTONS: whenever the message refers to a link/CTA (book, track, open, pay, view), ADD a URL button " +
-      '({type:"URL",text:"...",url:"https://..."}) instead of pasting the raw link in the body — one-tap buttons convert far better. ' +
+      '({type:"URL",text:"...",url:"https://..."}) instead of pasting the raw link in the body â€” one-tap buttons convert far better. ' +
       "(2) CLICK TRACKING (tracking link): STATIC url-button links are auto-wrapped in a Gambot tracked short link so clicks are logged " +
-      "(and can fire botomations). It's ON by default for MARKETING; you always pass the REAL destination url — Gambot swaps in the tracker. " +
+      "(and can fire botomations). It's ON by default for MARKETING; you always pass the REAL destination url â€” Gambot swaps in the tracker. " +
       'Set "trackClicks":false on a URL button to keep the raw link, or "trackClicks":true to force tracking on a non-marketing template. ' +
-      "(3) MARKETING / BROADCAST (דיוור): use category 'MARKETING' for any promotional broadcast. Its opt-out FOOTER is MANDATORY and " +
-      "OWNED by Gambot — DO NOT add your own FOOTER for MARKETING; Gambot adds a localized opt-out footer (Hebrew 'להסרה יש להשיב הסר', " +
-      "else 'Reply STOP to unsubscribe') and OVERRIDES any non-opt-out footer you passed. An existing opt-out footer or a 'הסר'/'STOP' " +
+      "(3) MARKETING / BROADCAST (×“×™×•×•×¨): use category 'MARKETING' for any promotional broadcast. Its opt-out FOOTER is MANDATORY and " +
+      "OWNED by Gambot â€” DO NOT add your own FOOTER for MARKETING; Gambot adds a localized opt-out footer (Hebrew '×œ×”×¡×¨×” ×™×© ×œ×”×©×™×‘ ×”×¡×¨', " +
+      "else 'Reply STOP to unsubscribe') and OVERRIDES any non-opt-out footer you passed. An existing opt-out footer or a '×”×¡×¨'/'STOP' " +
       "QUICK_REPLY button is respected. " +
       "The new template starts as PENDING (awaiting Meta approval). You do NOT have to wait for approval to SCHEDULE with it: you can " +
-      "immediately call gambot_create_campaign with campaignTrigger='Scheduled' and this template's id — it just has to be APPROVED before the scheduled runAt.",
+      "immediately call gambot_create_campaign with campaignTrigger='Scheduled' and this template's id â€” it just has to be APPROVED before the scheduled runAt.",
     inputSchema: {
       name: z.string(),
       language: z.string().describe("Language code, e.g. he / en"),
@@ -265,11 +414,11 @@ export const TOOLS: GambotTool[] = [
       components: z
         .array(z.record(z.any()))
         .describe(
-          "Template components. Examples — " +
+          "Template components. Examples â€” " +
             'HEADER text: {type:"HEADER",format:"TEXT",text:"Hi {{1}}",example:{header_text:["Dana"]}} | ' +
             'HEADER media: {type:"HEADER",format:"IMAGE",example:{header_handle:["<handle>"]}} | ' +
             'BODY: {type:"BODY",text:"Your order {{1}} shipped",example:{body_text:[["1234"]]}} | ' +
-            'FOOTER: {type:"FOOTER",text:"..."} (skip for MARKETING — Gambot owns the opt-out footer) | ' +
+            'FOOTER: {type:"FOOTER",text:"..."} (skip for MARKETING â€” Gambot owns the opt-out footer) | ' +
             'BUTTONS: {type:"BUTTONS",buttons:[{type:"QUICK_REPLY",text:"Track"},{type:"URL",text:"Open",url:"https://x.co/book"},{type:"PHONE_NUMBER",text:"Call",phone_number:"+972500000000"}]}. ' +
             'On a URL button pass the REAL destination in "url"; Gambot auto-tracks clicks (add "trackClicks":false to opt out, or "trackClicks":true to force). Prefer a URL button over a raw link in the body.'
         ),
@@ -307,12 +456,12 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/templates/media", { url: a.url, ...(a.type ? { type: a.type } : {}) }),
   },
 
-  // ── Contacts ───────────────────────────────────────────────────────────────
+  // â”€â”€ Contacts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_get_contact_fields",
     title: "Get contact fields",
     description:
-      "Get contact field definitions (base + custom/dynamic). Contacts store custom values as top-level keys — " +
+      "Get contact field definitions (base + custom/dynamic). Contacts store custom values as top-level keys â€” " +
       "pass them via 'customFields' on create/update.",
     inputSchema: {},
     run: (c) => c.get("/contacts/fields"),
@@ -323,12 +472,12 @@ export const TOOLS: GambotTool[] = [
     description:
       "Create a contact (returns the existing one if the phone is already known). " +
       "Custom/dynamic fields go under 'customFields' (see gambot_get_contact_fields for keys). " +
-      "── MARKETING COMPLIANCE — always consider these when creating a contact: " +
-      "• consent ('הסכמה לדיוור'): set consent=true ONLY when the person actually agreed to receive marketing " +
+      "â”€â”€ MARKETING COMPLIANCE â€” always consider these when creating a contact: " +
+      "â€¢ consent ('×”×¡×›×ž×” ×œ×“×™×•×•×¨'): set consent=true ONLY when the person actually agreed to receive marketing " +
       "(they ticked a box / said yes / signed up). Set consent=false to record an opt-out. If you don't know, " +
-      "OMIT it — never assume true. consent=false contacts are auto-excluded from every broadcast. " +
-      "• source ('מקור'): where the contact/consent came from (e.g. 'website form', 'landing page', 'phone call', " +
-      "'in-store', 'imported list'). Pass it whenever known — it's the audit trail for the opt-in and is stored as " +
+      "OMIT it â€” never assume true. consent=false contacts are auto-excluded from every broadcast. " +
+      "â€¢ source ('×ž×§×•×¨'): where the contact/consent came from (e.g. 'website form', 'landing page', 'phone call', " +
+      "'in-store', 'imported list'). Pass it whenever known â€” it's the audit trail for the opt-in and is stored as " +
       "both the contact's source and the consent source. " +
       "To change consent later use gambot_set_contact_consent.",
     inputSchema: {
@@ -339,12 +488,12 @@ export const TOOLS: GambotTool[] = [
       consent: z
         .boolean()
         .optional()
-        .describe("Marketing consent ('הסכמה לדיוור'). true = opted-in (mailable); false = opted-out (auto-excluded from broadcasts). OMIT if unknown — never assume true."),
+        .describe("Marketing consent ('×”×¡×›×ž×” ×œ×“×™×•×•×¨'). true = opted-in (mailable); false = opted-out (auto-excluded from broadcasts). OMIT if unknown â€” never assume true."),
       source: z
         .string()
         .optional()
-        .describe("Where the contact/consent came from ('מקור'), e.g. 'website form', 'phone call', 'imported list'. Recorded as the consent audit source."),
-      customFields: z.record(z.any()).optional().describe("Custom field values, e.g. { city: 'תל אביב' }."),
+        .describe("Where the contact/consent came from ('×ž×§×•×¨'), e.g. 'website form', 'phone call', 'imported list'. Recorded as the consent audit source."),
+      customFields: z.record(z.any()).optional().describe("Custom field values, e.g. { city: '×ª×œ ××‘×™×‘' }."),
       country: z.string().optional().describe("ISO-3166 alpha-2 (e.g. 'US','IL') to internationalize a local/national phoneNumber. Optional if the organization has a saved country (set at onboarding)."),
     },
     run: (c, a) =>
@@ -363,13 +512,13 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_list_contacts",
     title: "List / search contacts",
     description:
-      "List or SEARCH the org's contacts directory (all contacts — CRM + chat), paginated and ordered by most-recent " +
+      "List or SEARCH the org's contacts directory (all contacts â€” CRM + chat), paginated and ordered by most-recent " +
       "activity. THIS is the tool for 'who are my contacts', 'find the contact named/phoned/emailed X', 'contacts tagged " +
       "VIP', 'contacts with conversation status Open', 'contacts owned by agent Y'. Each item: phoneNumber, name, email, " +
       "tags, conversationStatus (Open/In Process/Closed), conversationCategory, ownerId, ownerName, consent, isSpam, " +
       "isCtwa, lastMessage (preview), lastMessageTime, createdOn. The response also includes a `summary` aggregated over " +
-      "the WHOLE filtered set (not just the current page) — { total, consent:{ optedIn, optedOut, unknown }, spam, ctwa, " +
-      "byStatus } — so you can answer 'how many contacts do I have / how many opted-in vs unsubscribed / how many are spam / " +
+      "the WHOLE filtered set (not just the current page) â€” { total, consent:{ optedIn, optedOut, unknown }, spam, ctwa, " +
+      "byStatus } â€” so you can answer 'how many contacts do I have / how many opted-in vs unsubscribed / how many are spam / " +
       "how many came from ads' from ONE call without paging. For ONE contact's full record use gambot_get_contact; for " +
       "ad-sourced contacts only use gambot_list_ctwa_contacts; for chat threads use gambot_list_conversations. " +
       "Returns { pageNumber, pageSize, count, total, summary, items }.",
@@ -393,9 +542,9 @@ export const TOOLS: GambotTool[] = [
     title: "Get contact",
     description:
       "Fetch a contact by phone number. The response carries the contact's MARKETING-CONSENT status:\n" +
-      "• consent=true → opted-in to marketing ('הסכמה לדיוור'); consent=false → opted-out/unsubscribed " +
-      "('ביקש/ה הסרה', auto-excluded from broadcasts); consent=null → unknown/never set (still mailable).\n" +
-      "• isSpam=true → marked as spam/blocked (also auto-excluded).\n" +
+      "â€¢ consent=true â†’ opted-in to marketing ('×”×¡×›×ž×” ×œ×“×™×•×•×¨'); consent=false â†’ opted-out/unsubscribed " +
+      "('×‘×™×§×©/×” ×”×¡×¨×”', auto-excluded from broadcasts); consent=null â†’ unknown/never set (still mailable).\n" +
+      "â€¢ isSpam=true â†’ marked as spam/blocked (also auto-excluded).\n" +
       "It also returns the contact's tags (`keys`), conversation status (`lastConversationStatus`: Open/In Process/Closed) " +
       "and category (`lastConversationCategory`). " +
       "Use gambot_set_contact_consent to opt a contact in/out, and gambot_mark_contact_spam to flag spam. " +
@@ -408,12 +557,12 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_set_contact_consent",
     title: "Set contact marketing consent",
     description:
-      "Set a contact's marketing-consent status ('הסכמה לדיוור'). " +
-      "consent=true opts the contact IN (mailable); consent=false opts them OUT / unsubscribes them — after which " +
+      "Set a contact's marketing-consent status ('×”×¡×›×ž×” ×œ×“×™×•×•×¨'). " +
+      "consent=true opts the contact IN (mailable); consent=false opts them OUT / unsubscribes them â€” after which " +
       "they are automatically excluded from ALL future broadcasts (campaigns). " +
       "Use this to record an opt-out the customer requested off-platform (phone call, email, web form), " +
       "or to re-enable a contact who gave fresh consent. Recipients can also opt out themselves by replying " +
-      "הסר/stop/unsubscribe. Optionally pass a 'source' note for the audit trail.",
+      "×”×¡×¨/stop/unsubscribe. Optionally pass a 'source' note for the audit trail.",
     inputSchema: {
       phone,
       consent: z.boolean().describe("true = opted-in (mailable); false = opted-out / unsubscribed."),
@@ -431,7 +580,7 @@ export const TOOLS: GambotTool[] = [
     description:
       "Mark a contact as spam (isSpam=true) or clear the flag (isSpam=false). " +
       "Marking as spam also opts the contact out of marketing (consent=false), so they are excluded from " +
-      "broadcasts and hidden from the active chat list. Unmarking spam does NOT automatically restore marketing consent — " +
+      "broadcasts and hidden from the active chat list. Unmarking spam does NOT automatically restore marketing consent â€” " +
       "use gambot_set_contact_consent for that.",
     inputSchema: {
       phone,
@@ -444,8 +593,8 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_list_ctwa_contacts",
     title: "List CTWA (ad) contacts",
     description:
-      "List the contacts that were created from a Click-to-WhatsApp (CTWA) ad / Meta referral — i.e. people who " +
-      "messaged the business by tapping an ad on Facebook/Instagram — each enriched with the originating ad info. " +
+      "List the contacts that were created from a Click-to-WhatsApp (CTWA) ad / Meta referral â€” i.e. people who " +
+      "messaged the business by tapping an ad on Facebook/Instagram â€” each enriched with the originating ad info. " +
       "Filter by a single ad (adId = referralSourceId), by sourceType ('ad' | 'post'), and/or a creation date range " +
       "(dateFrom/dateTo, yyyy-MM-dd). Paginated. Each item includes: phoneNumber, name, email, ownerId, ownerName, " +
       "createdOn, keys, and a 'ctwa' object { adId, sourceType, headline, body, sourceUrl, platform, ctwaClid }. " +
@@ -471,7 +620,7 @@ export const TOOLS: GambotTool[] = [
   {
     name: "gambot_update_contact",
     title: "Update contact",
-    description: "Update a contact — only the provided fields are changed. Custom fields go under 'customFields'.",
+    description: "Update a contact â€” only the provided fields are changed. Custom fields go under 'customFields'.",
     inputSchema: {
       phone,
       name: z.string().optional(),
@@ -491,9 +640,9 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_list_tags",
     title: "List contact tags",
     description:
-      "List the organization's contact TAGS (aka keys/lists) — the many-to-many labels a contact can carry and that " +
+      "List the organization's contact TAGS (aka keys/lists) â€” the many-to-many labels a contact can carry and that " +
       "campaigns target via the `keys` audience filter. Use this to resolve/validate a tag name before tagging or " +
-      "broadcasting. (Tags are different from a conversation CATEGORY, which is a single label per contact — see " +
+      "broadcasting. (Tags are different from a conversation CATEGORY, which is a single label per contact â€” see " +
       "gambot_list_conversation_categories.)",
     inputSchema: {},
     run: (c) => c.get("/contacts/tags"),
@@ -502,7 +651,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_update_contact_tags",
     title: "Add / remove tags on a contact",
     description:
-      "Add and/or remove TAGS on ONE contact, MERGING with its existing tags (safe — it never wipes the others). " +
+      "Add and/or remove TAGS on ONE contact, MERGING with its existing tags (safe â€” it never wipes the others). " +
       "Provide `add` and/or `remove` (arrays). New tags are auto-created org-wide. " +
       "To overwrite the entire tag list instead, use gambot_update_contact with `keys`.",
     inputSchema: {
@@ -519,7 +668,7 @@ export const TOOLS: GambotTool[] = [
     description:
       "Add and/or remove TAGS across MANY contacts at once (merging with each contact's existing tags). " +
       "Choose the audience with `phones` (explicit list) and/or `fromTag` (apply to every contact that currently has " +
-      "that tag — e.g. re-tag a whole group). Provide `add` and/or `remove`. Returns { requested, updated, notFound }. " +
+      "that tag â€” e.g. re-tag a whole group). Provide `add` and/or `remove`. Returns { requested, updated, notFound }. " +
       "Great for 'tag everyone in group A as B', 'remove tag X from these numbers', bulk segmentation, etc.",
     inputSchema: {
       phones: z.array(z.string()).optional().describe("Explicit phone numbers to update."),
@@ -532,18 +681,18 @@ export const TOOLS: GambotTool[] = [
   },
   {
     name: "gambot_bulk_update_contacts",
-    title: "Bulk update contacts (preview → confirm)",
+    title: "Bulk update contacts (preview â†’ confirm)",
     description:
-      "Update MANY contacts in ONE call — e.g. 'tag every contact created this week whose name contains לקוח with דיוור', reassign an owner, set a category/consent, or write a custom field across a whole segment. " +
+      "Update MANY contacts in ONE call â€” e.g. 'tag every contact created this week whose name contains ×œ×§×•×— with ×“×™×•×•×¨', reassign an owner, set a category/consent, or write a custom field across a whole segment. " +
       "Audience: `phones` (explicit) and/or `filter` { search, tag, status, category, ownerId, includeSpam, createdFrom, createdTo (yyyy-MM-dd, on the creation date) }. " +
       "Change: `fields` { addKeys[], removeKeys[], ownerId, ownerName, category, consent, isSpam, customFields{} }. " +
-      "⚠️ ALWAYS TWO STEPS — CONFIRM FIRST: call with confirm=false (default) to PREVIEW; it returns { requiresConfirmation:true, count, change, willAffect:[{phoneNumber,name,createdOn}] } and changes NOTHING. Show the user that EXACT list of who will be affected AND what will change, get their explicit approval, and ONLY THEN re-call with confirm=true. " +
-      "On execution every affected contact gets a timeline note 'בוצע על ידי גמבוט באישור המשתמש' (executed by Gambot with the user's approval). Pass `approvedBy` (who approved) for the audit record.",
+      "âš ï¸ ALWAYS TWO STEPS â€” CONFIRM FIRST: call with confirm=false (default) to PREVIEW; it returns { requiresConfirmation:true, count, change, willAffect:[{phoneNumber,name,createdOn}] } and changes NOTHING. Show the user that EXACT list of who will be affected AND what will change, get their explicit approval, and ONLY THEN re-call with confirm=true. " +
+      "On execution every affected contact gets a timeline note '×‘×•×¦×¢ ×¢×œ ×™×“×™ ×’×ž×‘×•×˜ ×‘××™×©×•×¨ ×”×ž×©×ª×ž×©' (executed by Gambot with the user's approval). Pass `approvedBy` (who approved) for the audit record.",
     inputSchema: {
       phones: z.array(z.string()).optional().describe("Explicit target phone numbers."),
       filter: z
         .object({
-          search: z.string().optional().describe("Match name/phone/email (e.g. a name like 'לקוח')."),
+          search: z.string().optional().describe("Match name/phone/email (e.g. a name like '×œ×§×•×—')."),
           tag: z.string().optional(),
           status: z.enum(["Open", "In Process", "Closed"]).optional(),
           category: z.string().optional(),
@@ -561,7 +710,7 @@ export const TOOLS: GambotTool[] = [
         category: z.string().optional().describe("Conversation category ('' clears it)."),
         consent: z.boolean().optional().describe("Marketing consent."),
         isSpam: z.boolean().optional(),
-        customFields: z.record(z.any()).optional().describe("Custom field values to set, e.g. { city:'תל אביב' }."),
+        customFields: z.record(z.any()).optional().describe("Custom field values to set, e.g. { city:'×ª×œ ××‘×™×‘' }."),
       }),
       confirm: z.boolean().optional().describe("Leave false/omitted to PREVIEW (no changes). Set true ONLY after the user approved the previewed list."),
       approvedBy: z.string().optional().describe("Who approved the action (recorded in the audit note)."),
@@ -571,13 +720,13 @@ export const TOOLS: GambotTool[] = [
   },
   {
     name: "gambot_bulk_update_leads",
-    title: "Bulk update leads (preview → confirm)",
+    title: "Bulk update leads (preview â†’ confirm)",
     description:
-      "Update MANY leads in ONE call — e.g. move a segment to a stage, change status/priority/owner, or write a custom field across many leads. " +
+      "Update MANY leads in ONE call â€” e.g. move a segment to a stage, change status/priority/owner, or write a custom field across many leads. " +
       "Audience: `ids` (explicit lead ids) and/or `filter` { search, createdFrom, createdTo (yyyy-MM-dd on createdOn) }. " +
-      "Change: `fields` — any base lead field (status, stageId, priority, ownerId, ownerName, source…) plus nested customFields{} (merged, never wiped). " +
-      "⚠️ ALWAYS TWO STEPS — CONFIRM FIRST: call with confirm=false (default) to PREVIEW; it returns { requiresConfirmation:true, count, change, willAffect:[{id,title,contactName,createdOn}] } and changes NOTHING. Show the user that EXACT list + what will change, get explicit approval, then re-call with confirm=true. " +
-      "Each affected lead's contact gets a timeline note 'בוצע על ידי גמבוט באישור המשתמש'. Pass `approvedBy` for the audit record.",
+      "Change: `fields` â€” any base lead field (status, stageId, priority, ownerId, ownerName, sourceâ€¦) plus nested customFields{} (merged, never wiped). " +
+      "âš ï¸ ALWAYS TWO STEPS â€” CONFIRM FIRST: call with confirm=false (default) to PREVIEW; it returns { requiresConfirmation:true, count, change, willAffect:[{id,title,contactName,createdOn}] } and changes NOTHING. Show the user that EXACT list + what will change, get explicit approval, then re-call with confirm=true. " +
+      "Each affected lead's contact gets a timeline note '×‘×•×¦×¢ ×¢×œ ×™×“×™ ×’×ž×‘×•×˜ ×‘××™×©×•×¨ ×”×ž×©×ª×ž×©'. Pass `approvedBy` for the audit record.",
     inputSchema: {
       ids: z.array(z.string()).optional().describe("Explicit lead ids."),
       filter: z
@@ -599,7 +748,7 @@ export const TOOLS: GambotTool[] = [
     title: "List conversation categories",
     description:
       "List the organization's conversation CATEGORIES (labels). A contact has AT MOST ONE category " +
-      "(lastConversationCategory) — a single classification for routing/pipeline, unlike tags which are many-to-many. " +
+      "(lastConversationCategory) â€” a single classification for routing/pipeline, unlike tags which are many-to-many. " +
       "Use before gambot_set_contact_category.",
     inputSchema: {},
     run: (c) => c.get("/contacts/categories"),
@@ -621,7 +770,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_set_conversation_status",
     title: "Set conversation status",
     description:
-      "Set a contact's conversation STATUS — one of 'Open', 'In Process', 'Closed'. This is the same status the chat " +
+      "Set a contact's conversation STATUS â€” one of 'Open', 'In Process', 'Closed'. This is the same status the chat " +
       "sidebar and status filters use (setting it also syncs the underlying conversation). Use to close/reopen a " +
       "conversation or move it into processing from an external workflow.",
     inputSchema: {
@@ -631,13 +780,13 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post(`/contacts/${encodeURIComponent(a.phone)}/status`, { status: a.status }),
   },
 
-  // ── Leads ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_get_lead_fields",
     title: "Get lead fields",
     description:
       "Get lead field definitions: { baseFields, customFields }. Custom lead values are stored under a nested " +
-      "'customFields' map — pass them the same way on create/update.",
+      "'customFields' map â€” pass them the same way on create/update.",
     inputSchema: {},
     run: (c) => c.get("/leads/fields"),
   },
@@ -678,7 +827,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_update_lead",
     title: "Update lead",
     description:
-      "Update a lead — only the provided fields are changed. Accepts any base field plus a nested 'customFields' " +
+      "Update a lead â€” only the provided fields are changed. Accepts any base field plus a nested 'customFields' " +
       "object (merged with existing custom values).",
     inputSchema: {
       leadId: z.string(),
@@ -697,20 +846,20 @@ export const TOOLS: GambotTool[] = [
     },
   },
 
-  // ── Cases ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_get_case_fields",
     title: "Get case fields",
     description:
-      "Get case (פנייה) field definitions: { baseFields, customFields }. Custom case values are stored under a " +
-      "nested 'customFields' map — pass them the same way on create/update.",
+      "Get case (×¤× ×™×™×”) field definitions: { baseFields, customFields }. Custom case values are stored under a " +
+      "nested 'customFields' map â€” pass them the same way on create/update.",
     inputSchema: {},
     run: (c) => c.get("/cases/fields"),
   },
   {
     name: "gambot_create_case",
     title: "Create case",
-    description: "Create a case (support ticket / פנייה). Accepts base fields plus a nested 'customFields' object.",
+    description: "Create a case (support ticket / ×¤× ×™×™×”). Accepts base fields plus a nested 'customFields' object.",
     inputSchema: {
       subject: z.string(),
       description: z.string().optional(),
@@ -728,7 +877,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_update_case",
     title: "Update case",
     description:
-      "Update a case — only the provided fields are changed. Accepts base fields plus a nested 'customFields' " +
+      "Update a case â€” only the provided fields are changed. Accepts base fields plus a nested 'customFields' " +
       "object (merged with existing custom values).",
     inputSchema: {
       caseId: z.string(),
@@ -746,7 +895,7 @@ export const TOOLS: GambotTool[] = [
     },
   },
 
-  // ── Tasks ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_create_task",
     title: "Create task",
@@ -768,7 +917,7 @@ export const TOOLS: GambotTool[] = [
       }),
   },
 
-  // ── Leads (read) ─────────────────────────────────────────────────────────────
+  // â”€â”€ Leads (read) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_leads",
     title: "List leads",
@@ -788,7 +937,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/leads/${encodeURIComponent(a.leadId)}`),
   },
 
-  // ── Cases (read) ─────────────────────────────────────────────────────────────
+  // â”€â”€ Cases (read) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_cases",
     title: "List cases",
@@ -811,7 +960,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_list_case_sla",
     title: "List cases by stage SLA",
     description:
-      "List cases (פניות / support tickets) ranked by their per-stage SLA — i.e. cases that have sat in their current stage " +
+      "List cases (×¤× ×™×•×ª / support tickets) ranked by their per-stage SLA â€” i.e. cases that have sat in their current stage " +
       "longer than the stage's target (or are about to). Use this to answer 'which cases breached SLA / are at risk / are overdue'. " +
       "'breached' = past the stage deadline; 'at_risk' = within the last 20% of the allotted time; 'ok' = within target; " +
       "'none' = the current stage has no SLA; 'resolved' = closed/resolved (clock stopped). Deadlines are business-hours-aware when enabled. " +
@@ -827,13 +976,13 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get("/cases/sla", { status: a.status, pageNumber: a.pageNumber, pageSize: a.pageSize }),
   },
 
-  // ── Notes (הערות) ──────────────────────────────────────────────────────────
+  // â”€â”€ Notes (×”×¢×¨×•×ª) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_notes",
     title: "List / search notes",
     description:
-      "Read the human-written notes (הערות) from across the CRM — the same feed as the in-app 'Notes Hub'. " +
-      "Aggregates notes attached to contacts (from the chat timeline), leads and cases (פניות). " +
+      "Read the human-written notes (×”×¢×¨×•×ª) from across the CRM â€” the same feed as the in-app 'Notes Hub'. " +
+      "Aggregates notes attached to contacts (from the chat timeline), leads and cases (×¤× ×™×•×ª). " +
       "Filter by source ('contact' | 'lead' | 'case'), a date range (dateFrom/dateTo, yyyy-MM-dd; defaults to the last 30 days), " +
       "the author (userId), or a free-text search inside the note body. Paginated. " +
       "Each item includes: note, entityType, entityId, contactId, contactName, entityName, createdOn, createdById, createdByName. " +
@@ -862,10 +1011,10 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_get_entity_notes",
     title: "Get notes for one record",
     description:
-      "Read the notes (הערות) attached to a single record. entityType is 'contact', 'lead' or 'case': " +
+      "Read the notes (×”×¢×¨×•×ª) attached to a single record. entityType is 'contact', 'lead' or 'case': " +
       "for 'contact' pass the contact's phone number as entityId; for 'lead'/'case' pass the record id. " +
       "By default this follows the organization's 'Sync Notes Between Entities' setting (ON by default): a contact also returns the notes " +
-      "written on its leads and cases, and a lead/case also returns its contact's notes — exactly what the user sees in the app's timeline. " +
+      "written on its leads and cases, and a lead/case also returns its contact's notes â€” exactly what the user sees in the app's timeline. " +
       "Pass includeRelated=false to get ONLY the notes stored on that exact record. " +
       "Returns the notes newest-first (each with id, note, createdOn, createdById, createdByName, plus the ORIGIN entityType/entityId " +
       "the note is stored on and viaRelatedEntity=true when it came from a related record). " +
@@ -874,7 +1023,7 @@ export const TOOLS: GambotTool[] = [
       entityType: z.enum(["contact", "lead", "case"]).describe("Which record type the notes belong to."),
       entityId: z.string().describe("Contact phone number (for 'contact') or the lead/case id."),
       limit: z.number().int().max(500).optional().describe("Max notes to return (default 50)."),
-      includeRelated: z.boolean().optional().describe("Include notes of related entities (contact↔leads/cases). Default: follows the org setting (ON)."),
+      includeRelated: z.boolean().optional().describe("Include notes of related entities (contactâ†”leads/cases). Default: follows the org setting (ON)."),
     },
     run: (c, a) =>
       c.get(`/notes/${encodeURIComponent(a.entityType)}/${encodeURIComponent(a.entityId)}`, {
@@ -886,9 +1035,9 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_add_note",
     title: "Add a note to a contact / lead / case",
     description:
-      "Write a note (הערה) on a contact, lead or case — the same internal timeline note a user adds in the app (NOT a WhatsApp message to the customer). " +
+      "Write a note (×”×¢×¨×”) on a contact, lead or case â€” the same internal timeline note a user adds in the app (NOT a WhatsApp message to the customer). " +
       "entityType is 'contact' (entityId = the contact's phone number), 'lead' or 'case' (entityId = the record id). " +
-      "The note is stored on THAT record, shows in its timeline immediately, and — when the organization's 'Sync Notes Between Entities' setting is on (default) — " +
+      "The note is stored on THAT record, shows in its timeline immediately, and â€” when the organization's 'Sync Notes Between Entities' setting is on (default) â€” " +
       "also appears in the related records' timelines (a note on a lead shows on the lead's contact, and vice-versa). The record must already exist. " +
       "Shown as authored by 'Gambot MCP'. Returns { id, entityType, entityId, note, createdOn }. Keep the id if you may need to edit it with gambot_update_note.",
     inputSchema: {
@@ -903,7 +1052,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_update_note",
     title: "Edit an existing note",
     description:
-      "Replace the text of an existing note (הערה). Pass the note's id plus the entityType/entityId of the record the note is STORED on — " +
+      "Replace the text of an existing note (×”×¢×¨×”). Pass the note's id plus the entityType/entityId of the record the note is STORED on â€” " +
       "both are returned with every note by gambot_get_entity_notes / gambot_add_note (a lead note read via its contact still reports the lead as its origin). " +
       "Only user notes can be edited (never system events). The edit is stamped with the update time and 'Gambot MCP'. " +
       "Returns { id, entityType, entityId, note, updatedOn }.",
@@ -920,7 +1069,7 @@ export const TOOLS: GambotTool[] = [
       ),
   },
 
-  // ── Tasks (read + update) ────────────────────────────────────────────────────
+  // â”€â”€ Tasks (read + update) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_tasks",
     title: "List tasks",
@@ -938,7 +1087,7 @@ export const TOOLS: GambotTool[] = [
   {
     name: "gambot_update_task",
     title: "Update task",
-    description: "Update a task — only the provided fields are changed.",
+    description: "Update a task â€” only the provided fields are changed.",
     inputSchema: {
       taskId: z.string(),
       title: z.string().optional(),
@@ -955,11 +1104,11 @@ export const TOOLS: GambotTool[] = [
     },
   },
 
-  // ── Quotes (הצעות מחיר) ──────────────────────────────────────────────────────
+  // â”€â”€ Quotes (×”×¦×¢×•×ª ×ž×—×™×¨) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_create_quote",
     title: "Create quote",
-    description: "Create a price quote. quoteData holds the quote fields (title, items, total, contact…).",
+    description: "Create a price quote. quoteData holds the quote fields (title, items, total, contactâ€¦).",
     inputSchema: { quoteData: z.record(z.any()).describe("Quote fields") },
     run: (c, a) => c.post("/quotes", a.quoteData),
   },
@@ -990,7 +1139,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.patch(`/quotes/${encodeURIComponent(a.quoteId)}`, a.fields),
   },
 
-  // ── Invoices (חשבוניות) ──────────────────────────────────────────────────────
+  // â”€â”€ Invoices (×—×©×‘×•× ×™×•×ª) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_create_invoice",
     title: "Create invoice",
@@ -1029,16 +1178,98 @@ export const TOOLS: GambotTool[] = [
   {
     name: "gambot_issue_invoice",
     title: "Issue invoice",
-    description: "Issue an invoice — locks it and assigns the official document number.",
+    description:
+      "Issue a DRAFT accounting document â€” locks it and assigns the official sequential document number (IRREVERSIBLE; confirm with the user first). " +
+      "Runs the same pipeline as the app: content validation (billing documents need â‰¥1 item), the legal Tax Authority guard and an automatic allocation number (×ž×¡×¤×¨ ×”×§×¦××”) " +
+      "for tax_invoice / combined above the statutory threshold (â‚ª15,000 in 2026, â‚ª10,000 in 2027, â‚ª5,000 from 2028). " +
+      "If the org is not connected to the Tax Authority you get error `allocation_required` â€” a human must connect it in Settings â†’ Invoice settings â†’ Tax Authority. " +
+      "Returns { documentNumber, status, publicUrl (customer-facing view/download link), allocation }. To create AND issue in one call use gambot_create_accounting_document.",
     inputSchema: { invoiceId: z.string() },
     run: (c, a) => c.post(`/invoices/${encodeURIComponent(a.invoiceId)}/issue`),
   },
+  {
+    name: "gambot_get_invoice_settings",
+    title: "Get invoice settings / readiness",
+    description:
+      "Read what this organization is set up for BEFORE issuing documents: business details configured, VAT rate, Tax Authority connection (allocation numbers), " +
+      "allocation threshold, the next official document number per type, copy-recipient emails and the supported document types.",
+    inputSchema: {},
+    run: (c) => c.get("/invoices/settings"),
+  },
+  {
+    name: "gambot_create_accounting_document",
+    title: "Create (and issue) accounting document",
+    description:
+      "Create a REAL accounting document in ONE call â€” the same engine as the Botomation 'Accounting document' action. docType: tax_invoice (×—×©×‘×•× ×™×ª ×ž×¡, default), combined (×—×©×‘×•× ×™×ª ×ž×¡ ×§×‘×œ×”), receipt (×§×‘×œ×”), " +
+      "transaction (×—×©×‘×•×Ÿ ×¢×¡×§×”), order (×”×–×ž× ×”), delivery_note (×ª×¢×•×“×ª ×ž×©×œ×•×—), work_order, purchase_order. VAT, discount and totals are computed server-side. " +
+      "By default it ISSUES the document (official numbering + Tax Authority allocation number when required; IRREVERSIBLE â€” confirm details with the user first); issueNow=false saves a draft for human review. " +
+      "sendToCustomer=true also emails it to customerEmail. combined/receipt: pass paymentMethod (bank_transfer, credit_card, cash, check, bit, paybox, paypal, app_payment, other) â€” one payment row for the document total is recorded. " +
+      "Pass quoteId to build from an existing quote instead of items, or sourceInvoiceId to link to an invoice. Credit invoices / credit receipts are created with gambot_derive_invoice_document. " +
+      "Call gambot_get_invoice_settings first to check readiness. Returns { invoiceId, documentNumber, publicUrl, allocation }.",
+    inputSchema: {
+      docType: z
+        .enum(["tax_invoice", "combined", "receipt", "transaction", "order", "delivery_note", "work_order", "purchase_order"])
+        .optional()
+        .describe("Document type (default tax_invoice)."),
+      customerName: z.string().optional(),
+      customerPhone: z.string().optional(),
+      customerEmail: z.string().optional(),
+      customerCompany: z.string().optional(),
+      customerTaxId: z.string().optional().describe("Customer ID / company number (×—.×¤ / ×¢.×ž)."),
+      items: z
+        .array(
+          z.object({
+            description: z.string(),
+            quantity: z.number().optional().describe("Default 1."),
+            unitPrice: z.number().describe("Unit price (VAT excluded unless pricesIncludeVat=true)."),
+            sku: z.string().optional(),
+          })
+        )
+        .optional()
+        .describe("Line items (required unless quoteId is given)."),
+      pricesIncludeVat: z.boolean().optional().describe("Unit prices already include VAT (default false)."),
+      vatRate: z.number().optional().describe("VAT percent (default = the org's rate, 18)."),
+      currency: z.string().optional().describe("Default ILS."),
+      discount: z.number().optional(),
+      discountType: z.enum(["percent", "fixed"]).optional(),
+      notes: z.string().optional(),
+      terms: z.string().optional(),
+      dueDate: z.string().optional().describe("ISO date."),
+      paymentMethod: z.string().optional().describe("For combined/receipt: bank_transfer | credit_card | cash | check | bit | paybox | paypal | app_payment | other."),
+      paymentReference: z.string().optional(),
+      quoteId: z.string().optional().describe("Build the document from this quote."),
+      sourceInvoiceId: z.string().optional().describe("Link to a source invoice (e.g. a receipt for it)."),
+      issueNow: z.boolean().optional().describe("Issue immediately (default true). false â‡’ save a draft."),
+      sendToCustomer: z.boolean().optional().describe("Email the issued document to customerEmail (default false)."),
+    },
+    run: (c, a) => c.post("/accounting-documents", a),
+  },
+  {
+    name: "gambot_derive_invoice_document",
+    title: "Create follow-up document from an invoice",
+    description:
+      "Create a follow-up document from an EXISTING invoice/document: a receipt (×§×‘×œ×”) after payment, a combined/tax invoice, a credit invoice (×—×©×‘×•× ×™×ª ×–×™×›×•×™), a credit receipt, a delivery or return note. " +
+      "Receipts and credits may be PARTIAL (partialAmount) â€” the source keeps a running balance (paidAmount / balanceDue / paymentStatus open|partial|paid); a credit cannot exceed what is still owed. " +
+      "Creates a DRAFT by default; issue=true also issues it (irreversible â€” confirm first). Returns the new invoiceId.",
+    inputSchema: {
+      invoiceId: z.string().describe("The source document id."),
+      targetType: z
+        .enum(["receipt", "combined", "tax_invoice", "credit_invoice", "credit_receipt", "delivery_note", "return_note"])
+        .describe("The document to create."),
+      partialAmount: z.number().optional().describe("Partial receipt/credit amount (omit for the full remaining amount)."),
+      issue: z.boolean().optional().describe("Issue it right away (default false = draft)."),
+    },
+    run: (c, a) => {
+      const { invoiceId, ...rest } = a;
+      return c.post(`/invoices/${encodeURIComponent(invoiceId)}/derive`, rest);
+    },
+  },
 
-  // ── Orders (הזמנות) ──────────────────────────────────────────────────────────
+  // â”€â”€ Orders (×”×–×ž× ×•×ª) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_create_order",
     title: "Create order",
-    description: "Create a store order. Body holds order fields (customer, items, total…).",
+    description: "Create a store order. Body holds order fields (customer, items, totalâ€¦).",
     inputSchema: { order: z.record(z.any()).describe("Order fields") },
     run: (c, a) => c.post("/orders", a.order),
   },
@@ -1069,17 +1300,17 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.patch(`/orders/${encodeURIComponent(a.orderId)}`, a.fields),
   },
 
-  // ── Payment transactions (עסקאות / פירוט עסקאות) ─────────────────────────────
+  // â”€â”€ Payment transactions (×¢×¡×§××•×ª / ×¤×™×¨×•×˜ ×¢×¡×§××•×ª) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_transactions",
     title: "List payment transactions",
     description:
-      "List payment / clearing transactions (עסקאות), newest first. Use this to answer 'what did this customer pay/owe' or to give a transaction breakdown. Each item includes amount, status (pending/paid/failed), customerName, customerPhone, description, entityType (quote/invoice/order/lead/case…), vatInclusive, amountBeforeVat, provider, paymentUrl, items[] and createdAt/paidAt. Filter by contactPhone, status or entityType.",
+      "List payment / clearing transactions (×¢×¡×§××•×ª), newest first. Use this to answer 'what did this customer pay/owe' or to give a transaction breakdown. Each item includes amount, status (pending/paid/failed), customerName, customerPhone, description, entityType (quote/invoice/order/lead/caseâ€¦), vatInclusive, amountBeforeVat, provider, paymentUrl, items[] and createdAt/paidAt. Filter by contactPhone, status or entityType.",
     inputSchema: {
       limit: z.number().int().max(500).optional(),
       contactPhone: z.string().optional().describe("Filter to one customer's phone (any format)."),
       status: z.string().optional().describe("pending | paid | failed"),
-      entityType: z.string().optional().describe("quote | invoice | order | lead | case …"),
+      entityType: z.string().optional().describe("quote | invoice | order | lead | case â€¦"),
     },
     run: (c, a) => c.get("/transactions", { limit: a.limit, contactPhone: a.contactPhone, status: a.status, entityType: a.entityType }),
   },
@@ -1092,7 +1323,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/transactions/${encodeURIComponent(a.transactionId)}`),
   },
 
-  // ── E-Signature documents (read) ─────────────────────────────────────────────
+  // â”€â”€ E-Signature documents (read) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_signatures",
     title: "List signature documents",
@@ -1115,7 +1346,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/signatures/${encodeURIComponent(a.documentId)}/link`),
   },
 
-  // ── Web forms (read) ─────────────────────────────────────────────────────────
+  // â”€â”€ Web forms (read) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_forms",
     title: "List web forms",
@@ -1145,7 +1376,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/forms/${encodeURIComponent(a.formId)}/submissions`, { limit: a.limit }),
   },
 
-  // ── Document templates (read) ────────────────────────────────────────────────
+  // â”€â”€ Document templates (read) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_documents",
     title: "List document templates",
@@ -1171,7 +1402,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_create_document_link",
     title: "Create document template fill link",
     description:
-      "Generate a distributable fill link for a document template. A template has no single static link (each customer fills their own copy), so this creates a fill-only instance and returns its public /form/ URL to share with the customer. Optionally pre-fill variables via contactPhone/leadId/variables.",
+      "Get the public fill link (/form/ URL) of a document template. Without contactPhone/leadId/variables this is the template's ONE PERMANENT link: the same URL on every call, and template edits are applied to it automatically (public forever unless an expiry is set on the template in the UI). With pre-fill data (contactPhone/leadId/variables) a separate personal instance is created instead.",
     inputSchema: {
       templateId: z.string(),
       contactPhone: z.string().optional(),
@@ -1187,7 +1418,7 @@ export const TOOLS: GambotTool[] = [
     },
   },
 
-  // ── Users (management) ───────────────────────────────────────────────────────
+  // â”€â”€ Users (management) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_create_user",
     title: "Create (invite) user",
@@ -1221,7 +1452,7 @@ export const TOOLS: GambotTool[] = [
   {
     name: "gambot_update_user",
     title: "Update user",
-    description: "Update user fields — only the provided ones are changed.",
+    description: "Update user fields â€” only the provided ones are changed.",
     inputSchema: {
       userId: z.string(),
       userName: z.string().optional(),
@@ -1258,13 +1489,13 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_delete_user",
     title: "Delete user",
     description:
-      "Permanently delete an organization user (removes both the auth account and the profile). This is irreversible — " +
+      "Permanently delete an organization user (removes both the auth account and the profile). This is irreversible â€” " +
       "prefer gambot_disable_user to just deactivate access.",
     inputSchema: { userId: z.string() },
     run: (c, a) => c.del(`/users/${encodeURIComponent(a.userId)}`),
   },
 
-  // ── Campaigns ──────────────────────────────────────────────────────────────
+  // â”€â”€ Campaigns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_campaigns",
     title: "List campaigns",
@@ -1294,19 +1525,64 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/campaigns/${encodeURIComponent(a.campaignId)}/results`),
   },
   {
+    name: "gambot_get_current_time",
+    title: "Get current date & time",
+    description:
+      "Returns the REAL current date/time in a timezone (default Asia/Jerusalem) plus the UTC time and offset. Call this BEFORE scheduling " +
+      "anything (gambot_create_campaign / reschedule / email campaigns) so 'today', 'in an hour', '14:30' are computed from the real clock, " +
+      "not guessed. Gambot reads every runAt as LOCAL wall-clock time in the `timezone` you send with it — so use `nowLocal` from here, " +
+      "keep the same `timezone` in the scheduling call, and never convert to UTC.",
+    inputSchema: {
+      timezone: z.string().optional().describe("IANA timezone, e.g. Asia/Jerusalem (default)."),
+    },
+    run: async (_c, a) => {
+      const timezone = (a.timezone || "Asia/Jerusalem").trim();
+      const now = new Date();
+      let parts: Record<string, string>;
+      try {
+        parts = Object.fromEntries(
+          new Intl.DateTimeFormat("en-GB", {
+            timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+            hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", weekday: "long",
+          }).formatToParts(now).map((p) => [p.type, p.value]),
+        );
+      } catch {
+        throw new Error(`Unknown timezone '${timezone}'. Use an IANA name such as Asia/Jerusalem.`);
+      }
+      const nowLocal = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+      const asIfUtc = Date.parse(nowLocal + "Z");
+      const utcOffsetMinutes = Math.round((asIfUtc - Math.floor(now.getTime() / 1000) * 1000) / 60000);
+      const sign = utcOffsetMinutes >= 0 ? "+" : "-";
+      const abs = Math.abs(utcOffsetMinutes);
+      return {
+        timezone,
+        nowLocal,
+        weekday: parts.weekday,
+        utcOffset: `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`,
+        utcOffsetMinutes,
+        nowUtc: now.toISOString(),
+        hint: "Use nowLocal as 'now' and pass runAt as local wall-clock time (no Z / offset) together with this same timezone.",
+      };
+    },
+  },
+  {
     name: "gambot_create_campaign",
     title: "Create campaign",
     description:
-      "Create a SAVED WhatsApp broadcast campaign. Use this whenever the send should be a campaign — i.e. ANY scheduled send " +
+      "Create a SAVED WhatsApp broadcast campaign. Use this whenever the send should be a campaign â€” i.e. ANY scheduled send " +
       "(one-time OR recurring is ALWAYS a campaign), or a reusable CRM-segment broadcast. For a plain immediate send to a tag/list " +
       "use gambot_send_campaign; for an Excel/CSV sheet use gambot_send_campaign_from_excel (which also saves a campaign). " +
       "After creating, run it now with gambot_run_campaign (scheduled ones run automatically at runAt). " +
       "For a template broadcast set messageType='Template' + wabaTemplateId; for free text set messageType='regular' + message " +
-      "(note: a 'regular' broadcast only reaches recipients whose 24h window is open — prefer a Template for cold audiences). " +
+      "(note: a 'regular' broadcast only reaches recipients whose 24h window is open â€” prefer a Template for cold audiences). " +
       "Audience: recipientSource='Excel' + ExcelData, or ContactFilters (CRM segment), or legacy ContactsQuery. " +
       "Scheduling: campaignTrigger='Scheduled' + scheduleType ('once' with runAt+timezone, or 'repeated' with interval/intervalNumber/endCondition). " +
-      "PENDING TEMPLATES: a SCHEDULED campaign MAY reference a template that is NOT yet approved (status PENDING) — it only needs to be " +
-      "APPROVED by Meta before runAt. So the flow 'send this to these people on Thursday' works as: gambot_create_template → then this tool " +
+      "TIME RULES (shared contract): ALWAYS send `timezone` (IANA, e.g. Asia/Jerusalem) together with every runAt, and send runAt as the LOCAL wall-clock time " +
+      "in that timezone (2026-10-14T13:30:00) — no Z, no UTC offset, no UTC conversion. Call gambot_get_current_time first to know the real 'now'. " +
+      "A runAt in the past is rejected (it would fire immediately). The response's scheduling.runTimes lists every scheduled run in local time AND UTC " +
+      "(plus minutesFromNow) — check it matches what the user asked and tell them the local times. " +
+      "PENDING TEMPLATES: a SCHEDULED campaign MAY reference a template that is NOT yet approved (status PENDING) â€” it only needs to be " +
+      "APPROVED by Meta before runAt. So the flow 'send this to these people on Thursday' works as: gambot_create_template â†’ then this tool " +
       "with campaignTrigger='Scheduled' + the new template id, even while it's still pending. The response includes a non-blocking " +
       "`templateStatusWarning` when the template isn't approved yet; relay it to the user (a REJECTED template will never send).",
     inputSchema: {
@@ -1316,8 +1592,8 @@ export const TOOLS: GambotTool[] = [
       message: z.string().optional().describe("Message text (required for messageType='regular')."),
       campaignTrigger: z.enum(["Manually", "Scheduled"]).optional().describe("Manually (default) or Scheduled."),
       scheduleType: z.enum(["once", "repeated"]).optional(),
-      runAt: z.string().optional().describe("First/only run datetime, e.g. 2026-07-01T09:00:00 (with timezone)."),
-      timezone: z.string().optional().describe("IANA timezone, e.g. Asia/Jerusalem."),
+      runAt: z.string().optional().describe("First/only run datetime as LOCAL wall-clock time in `timezone`, e.g. 2026-07-01T09:00:00 — do NOT convert to UTC and do NOT append Z or an offset. A time in the past is rejected (to send now use gambot_run_campaign)."),
+      timezone: z.string().optional().describe("IANA timezone, e.g. Asia/Jerusalem. ALWAYS send it with runAt / any scheduled time (if omitted, the organization's timezone is used and reported back)."),
       interval: z.enum(["Second", "Minute", "Hour", "Day", "Week", "Month", "Year"]).optional(),
       intervalNumber: z.number().optional().describe("Every N intervals (recurring)."),
       endCondition: z.record(z.any()).optional().describe("{ type: 'none'|'until'|'count', value: '...' }"),
@@ -1358,12 +1634,12 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_list_scheduled_runs",
     title: "List a campaign's scheduled runs",
     description:
-      "List the concrete SCHEDULED RUNS (occurrences) of a scheduled/recurring/block campaign — every future date it will fire, " +
+      "List the concrete SCHEDULED RUNS (occurrences) of a scheduled/recurring/block campaign â€” every future date it will fire, " +
       "with each occurrence's runAt, status, and (for split campaigns) the recipient batch range. Works for ALL scheduled types: " +
       "a one-time scheduled campaign (single occurrence), a recurring campaign (e.g. 'every Tuesday'), auto-split blocks, and " +
       "manually-timed blocks. Use this FIRST to get the exact runAt values, then pass one to gambot_skip_scheduled_run (turn a " +
       "single date off) or gambot_reschedule_scheduled_run (move a date). If `runs` is empty the campaign is pattern-only (simple " +
-      "interval with no materialized dates) — change its pattern with gambot_update_campaign instead.",
+      "interval with no materialized dates) â€” change its pattern with gambot_update_campaign instead.",
     inputSchema: { campaignId: z.string() },
     run: (c, a) => c.get(`/campaigns/${encodeURIComponent(a.campaignId)}/runs`),
   },
@@ -1400,36 +1676,36 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_send_campaign",
     title: "Send ad-hoc campaign",
     description:
-      "IMMEDIATE 'run to a group' — send an ad-hoc broadcast NOW to a tag/segment/phone-list, WITHOUT saving a campaign. " +
-      "Use this ONLY for an immediate one-off send to CONTACTS. Do NOT use it for: a schedule (once or recurring) or an Excel/CSV sheet — " +
+      "IMMEDIATE 'run to a group' â€” send an ad-hoc broadcast NOW to a tag/segment/phone-list, WITHOUT saving a campaign. " +
+      "Use this ONLY for an immediate one-off send to CONTACTS. Do NOT use it for: a schedule (once or recurring) or an Excel/CSV sheet â€” " +
       "those are ALWAYS saved as a campaign (use gambot_create_campaign for scheduled/recurring or CRM-segment campaigns, and " +
       "gambot_send_campaign_from_excel for a sheet).\n" +
       "TWO things are required: (1) an AUDIENCE and (2) the MESSAGE.\n" +
-      "AUDIENCE — pick ONE: `keys` (send to everyone with these tags/lists, e.g. keys:['מכבי חיפה'] — the most common request 'send to tag X'), " +
+      "AUDIENCE â€” pick ONE: `keys` (send to everyone with these tags/lists, e.g. keys:['×ž×›×‘×™ ×—×™×¤×”'] â€” the most common request 'send to tag X'), " +
       "`recipientPhoneNumbers` (explicit list), `excelRecipients` (per-recipient variables), or `filters` (advanced CRM segment). " +
-      "Never send with an empty audience — if the user named a tag/list, put it in `keys`.\n" +
-      "MESSAGE — you MUST set `messageType`: for a WhatsApp TEMPLATE set messageType='Template' AND `templateId` (the exact template the user chose); " +
+      "Never send with an empty audience â€” if the user named a tag/list, put it in `keys`.\n" +
+      "MESSAGE â€” you MUST set `messageType`: for a WhatsApp TEMPLATE set messageType='Template' AND `templateId` (the exact template the user chose); " +
       "for free text set messageType='regular' AND `message`. Do not leave messageType/templateId empty when the user asked to send a specific template. " +
-      "Use gambot_list_templates to resolve the template name → id first if needed.\n" +
+      "Use gambot_list_templates to resolve the template name â†’ id first if needed.\n" +
       "PREFER A TEMPLATE for broadcasts: a 'regular' free-text broadcast is delivered ONLY to recipients whose 24-hour window is open " +
       "(they messaged you in the last 24h) and SILENTLY FAILS for everyone else. Cold/one-way audiences must get a Template.\n" +
-      "REGULAR-BROADCAST SAFETY (messageType='regular'): the API will NOT send it straight away — it first returns " +
+      "REGULAR-BROADCAST SAFETY (messageType='regular'): the API will NOT send it straight away â€” it first returns " +
       "error 'regular_window_confirmation_required' with { audienceCount, closedWindowCount, willReceive, recommendation }. " +
       "You MUST relay this to the user: tell them how many recipients (closedWindowCount) will NOT receive the message because their " +
       "24-hour window is closed, and RECOMMEND sending a template instead. Only after the user decides: either switch to a template " +
       "(messageType='Template' + templateId), or re-call this tool with confirmRegular=true to send the free text anyway (only the " +
       "open-window recipients will get it). You can also call with dryRun=true first to preview the numbers without sending.\n" +
-      "Compliance is built in: contacts who opted out (consent=false — via a הסר/stop/unsubscribe reply, or set with " +
+      "Compliance is built in: contacts who opted out (consent=false â€” via a ×”×¡×¨/stop/unsubscribe reply, or set with " +
       "gambot_set_contact_consent) and contacts flagged as spam (isSpam=true) are AUTOMATICALLY excluded from the audience. " +
       "Every org also has an ACTIVE opt-out flow; the response echoes it under `optOut` (enabled=true) and your consent-to-mail under `consent`.",
     inputSchema: {
       messageType: z.enum(["Template", "regular"]).describe("REQUIRED. 'Template' = WhatsApp template broadcast (needs templateId); 'regular' = free text (needs message)."),
-      templateId: z.string().optional().describe("Template id — REQUIRED when messageType='Template'. Resolve names via gambot_list_templates."),
-      message: z.string().optional().describe("Free-text body — REQUIRED when messageType='regular'."),
+      templateId: z.string().optional().describe("Template id â€” REQUIRED when messageType='Template'. Resolve names via gambot_list_templates."),
+      message: z.string().optional().describe("Free-text body â€” REQUIRED when messageType='regular'."),
       keys: z
         .array(z.string())
         .optional()
-        .describe("Audience by tag/list: send to every contact tagged with ANY of these (e.g. ['מכבי חיפה']). Simplest way to do 'send to tag/list X'."),
+        .describe("Audience by tag/list: send to every contact tagged with ANY of these (e.g. ['×ž×›×‘×™ ×—×™×¤×”']). Simplest way to do 'send to tag/list X'."),
       recipientPhoneNumbers: z.array(z.string()).optional().describe("Explicit phone list."),
       excelRecipients: z
         .array(z.record(z.any()))
@@ -1438,7 +1714,7 @@ export const TOOLS: GambotTool[] = [
       filters: z
         .record(z.any())
         .optional()
-        .describe("Advanced CRM segment → resolved to phones. Shape: { logic:'AND'|'OR', filters:[ ... ] }. Tag/list filter item: { filterType:'group', operator:'equals', groupValue:['מכבי חיפה'] }. For a simple tag audience prefer `keys` instead."),
+        .describe("Advanced CRM segment â†’ resolved to phones. Shape: { logic:'AND'|'OR', filters:[ ... ] }. Tag/list filter item: { filterType:'group', operator:'equals', groupValue:['×ž×›×‘×™ ×—×™×¤×”'] }. For a simple tag audience prefer `keys` instead."),
       consentConfirmed: z
         .boolean()
         .optional()
@@ -1446,11 +1722,11 @@ export const TOOLS: GambotTool[] = [
       dryRun: z
         .boolean()
         .optional()
-        .describe("Preview only — do NOT send. Returns the audience size and, for a 'regular' broadcast, how many recipients have a CLOSED 24h window (won't receive it) plus a recommendation. Use this to warn the user before sending."),
+        .describe("Preview only â€” do NOT send. Returns the audience size and, for a 'regular' broadcast, how many recipients have a CLOSED 24h window (won't receive it) plus a recommendation. Use this to warn the user before sending."),
       confirmRegular: z
         .boolean()
         .optional()
-        .describe("Set to true to actually SEND a 'regular' free-text broadcast. Without it, a regular broadcast is BLOCKED and returns 'regular_window_confirmation_required' with the closed-window count — relay that to the user (and recommend a template) first, then re-call with confirmRegular=true. Ignored for messageType='Template'."),
+        .describe("Set to true to actually SEND a 'regular' free-text broadcast. Without it, a regular broadcast is BLOCKED and returns 'regular_window_confirmation_required' with the closed-window count â€” relay that to the user (and recommend a template) first, then re-call with confirmRegular=true. Ignored for messageType='Template'."),
       defaultCountry: z
         .string()
         .optional()
@@ -1479,16 +1755,16 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_send_campaign_from_excel",
     title: "Send / schedule a template broadcast from an Excel/CSV",
     description:
-      "Broadcast a WhatsApp TEMPLATE to everyone in an Excel/CSV the user gave you — the easiest way to do a mail-merge blast. " +
-      "An Excel/CSV broadcast is ALWAYS saved as a campaign (this matches the Gambot web app — there is no unsaved Excel send). " +
+      "Broadcast a WhatsApp TEMPLATE to everyone in an Excel/CSV the user gave you â€” the easiest way to do a mail-merge blast. " +
+      "An Excel/CSV broadcast is ALWAYS saved as a campaign (this matches the Gambot web app â€” there is no unsaved Excel send). " +
       "If you send it immediately, this tool SAVES the campaign and then RUNS it right away; if you schedule it, it just saves it and the scheduler runs it. " +
       "YOU (the agent) read the sheet and pass: `rows` (one object per row, keyed by the column header), `phoneColumn` (which column holds the phone), " +
-      "and the variable mapping — either `variableColumns` (ordered: 1st column → {{1}}, 2nd → {{2}}, …) or `variableMapping` ({ var1:'ColName', var2:'ColName2' }). " +
+      "and the variable mapping â€” either `variableColumns` (ordered: 1st column â†’ {{1}}, 2nd â†’ {{2}}, â€¦) or `variableMapping` ({ var1:'ColName', var2:'ColName2' }). " +
       "TIP: call gambot_get_template_variables first to see how many variables the template expects, then map columns to them. " +
       "Prefer a TEMPLATE (templateId): a free-text `message` broadcast only reaches recipients whose 24-hour window is open and silently fails for everyone else. " +
       "To SCHEDULE add scheduling fields (scheduleType:'once' + runAt + timezone, or scheduleType:'repeated' + interval/intervalNumber/endCondition). " +
       "Every original column is also stored per-recipient (rowData) so later automations can use any value by name. " +
-      "Compliance is built in: opted-out contacts (consent=false — via a הסר/stop/unsubscribe reply or gambot_set_contact_consent) and spam-flagged contacts (isSpam=true) are AUTOMATICALLY excluded; the org's ACTIVE opt-out flow is echoed under `optOut` (enabled=true) and your consent under `consent`.",
+      "Compliance is built in: opted-out contacts (consent=false â€” via a ×”×¡×¨/stop/unsubscribe reply or gambot_set_contact_consent) and spam-flagged contacts (isSpam=true) are AUTOMATICALLY excluded; the org's ACTIVE opt-out flow is echoed under `optOut` (enabled=true) and your consent under `consent`.",
     inputSchema: {
       templateId: z.string().optional().describe("Template id to broadcast (messageType=Template). Omit and set `message` for free text."),
       message: z.string().optional().describe("Free-text message (used only when templateId is not provided)."),
@@ -1499,7 +1775,7 @@ export const TOOLS: GambotTool[] = [
       variableColumns: z
         .array(z.string())
         .optional()
-        .describe("Ordered column headers mapped to template variables: [ col→{{1}}, col→{{2}}, … ]."),
+        .describe("Ordered column headers mapped to template variables: [ colâ†’{{1}}, colâ†’{{2}}, â€¦ ]."),
       variableMapping: z
         .record(z.string())
         .optional()
@@ -1507,10 +1783,10 @@ export const TOOLS: GambotTool[] = [
       contactFieldColumns: z
         .record(z.string())
         .optional()
-        .describe("Optional { contactFieldName: 'ColName' } — saved onto the contact (e.g. { email:'Email' })."),
+        .describe("Optional { contactFieldName: 'ColName' } â€” saved onto the contact (e.g. { email:'Email' })."),
       campaignName: z.string().optional().describe("Optional name for the saved campaign (auto-generated if omitted). Excel broadcasts are ALWAYS saved as a campaign."),
       scheduleType: z.enum(["once", "repeated"]).optional(),
-      runAt: z.string().optional().describe("First/only run datetime, e.g. 2026-07-01T09:00:00 (interpreted in `timezone`)."),
+      runAt: z.string().optional().describe("First/only run datetime as LOCAL wall-clock time in `timezone`, e.g. 2026-07-01T09:00:00 — do NOT convert to UTC and do NOT append Z or an offset. A time in the past is rejected (to send now use gambot_run_campaign)."),
       timezone: z.string().optional().describe("IANA timezone, e.g. Asia/Jerusalem, America/New_York."),
       interval: z.enum(["Second", "Minute", "Hour", "Day", "Week", "Month", "Year"]).optional(),
       intervalNumber: z.number().optional().describe("Every N intervals (recurring)."),
@@ -1567,7 +1843,7 @@ export const TOOLS: GambotTool[] = [
       const isTemplate = !!a.templateId;
       const scheduling = !!(a.scheduleType || a.runAt || a.interval);
 
-      // An Excel/CSV broadcast is ALWAYS saved as a campaign (parity with the Gambot web app — there
+      // An Excel/CSV broadcast is ALWAYS saved as a campaign (parity with the Gambot web app â€” there
       // is no unsaved Excel send). Immediate sends are saved and then run right away; scheduled sends
       // are saved and executed by the scheduler.
       const campaign: Record<string, any> = {
@@ -1590,33 +1866,33 @@ export const TOOLS: GambotTool[] = [
 
       const created: any = await c.post("/campaigns", campaign);
 
-      // Scheduled → the scheduler runs it at runAt; return the saved campaign.
+      // Scheduled â†’ the scheduler runs it at runAt; return the saved campaign.
       if (scheduling) return created;
 
-      // Immediate → run the saved campaign now (create + run), so a one-time Excel blast still goes
+      // Immediate â†’ run the saved campaign now (create + run), so a one-time Excel blast still goes
       // out instantly while remaining a proper, reportable campaign.
       const campaignId =
         created?.data?.campaignId ?? created?.campaignId ?? created?.data?.campaingId ?? created?.campaingId;
-      if (!campaignId) return created; // couldn't resolve id — surface the create response as-is
+      if (!campaignId) return created; // couldn't resolve id â€” surface the create response as-is
       const run = await c.post(`/campaigns/${encodeURIComponent(String(campaignId))}/run`);
       return { campaign: created, run };
     },
   },
 
-  // ── Bots / Automations ───────────────────────────────────────────────────────
+  // â”€â”€ Bots / Automations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // MODEL an agent must understand: a conversational bot is usually a PACKAGE of botomations that were
   // deployed together and share a `sourceFlowId`. Each list item carries `role`, `triggerKind`,
   // `sourceFlowId` and `linkedBotomationId` so you can reconstruct it. Roles:
-  //   • main_bot   — the conversation (isBot=true). Flavour = menu (opening template + button routing),
+  //   â€¢ main_bot   â€” the conversation (isBot=true). Flavour = menu (opening template + button routing),
   //                  ai (a 'GambotAi' step hands the chat to "Gambot AI"), or combined.
-  //   • activator (מפעיל) — the TRIGGER that starts the bot. triggerKind: incoming_message (keyword/any),
+  //   â€¢ activator (×ž×¤×¢×™×œ) â€” the TRIGGER that starts the bot. triggerKind: incoming_message (keyword/any),
   //                  template_button, campaign_lead (lead from an ad/campaign), owner_assigned (contact
   //                  assigned to an owner such as Gambot AI), scheduled, or inactivity ("no message in X days").
-  //   • gambot_ai  — answers when a contact's owner is "Gambot AI". Route a contact to the AI by assigning
+  //   â€¢ gambot_ai  â€” answers when a contact's owner is "Gambot AI". Route a contact to the AI by assigning
   //                  its owner to Gambot AI; this botomation triggers on contactOwner == the Gambot AI user.
-  //   • human_intervention_cancel (ביטול בוט בהתערבות אנושית) — trigger fires when a HUMAN agent sends a
+  //   â€¢ human_intervention_cancel (×‘×™×˜×•×œ ×‘×•×˜ ×‘×”×ª×¢×¨×‘×•×ª ×× ×•×©×™×ª) â€” trigger fires when a HUMAN agent sends a
   //                  message; it stops the running bot so it never talks over a human. Seeded active per org.
-  //   • return_to_menu — sends the contact back to the main menu.
+  //   â€¢ return_to_menu â€” sends the contact back to the main menu.
   // The complete package, in order, is: (main bot) + (activator/trigger) + (human-intervention cancel).
   // Build ALL THREE in one call with gambot_deploy_bot_package (preferred for "create a bot"); toggle the
   // whole thing with gambot_set_bot_status(includePackage=true); inspect it with gambot_get_bot_package.
@@ -1626,7 +1902,7 @@ export const TOOLS: GambotTool[] = [
     description:
       "List the organization's bots & chat automations (botomations). Pass botsOnly=true for only the visual " +
       "menu/AI bots. Each item includes role (main_bot | activator | gambot_ai | human_intervention_cancel | " +
-      "return_to_menu | automation), triggerKind, sourceFlowId and linkedBotomationId — botomations sharing a " +
+      "return_to_menu | automation), triggerKind, sourceFlowId and linkedBotomationId â€” botomations sharing a " +
       "sourceFlowId form ONE deployed bot 'package' (main bot + activator + human-intervention cancel + Gambot AI).",
     inputSchema: { botsOnly: z.boolean().optional() },
     run: (c, a) => c.get("/bots", { botsOnly: a.botsOnly }),
@@ -1643,7 +1919,7 @@ export const TOOLS: GambotTool[] = [
     title: "Get bot package",
     description:
       "Return every botomation deployed together with this one (they share a sourceFlowId): the main bot plus " +
-      "its activator (the trigger, מפעיל), the human-intervention cancel (ביטול בוט בהתערבות אנושית), the Gambot " +
+      "its activator (the trigger, ×ž×¤×¢×™×œ), the human-intervention cancel (×‘×™×˜×•×œ ×‘×•×˜ ×‘×”×ª×¢×¨×‘×•×ª ×× ×•×©×™×ª), the Gambot " +
       "AI answerer and any return-to-menu helper. Use this to see the WHOLE bot before turning it on/off. If the " +
       "bot has no sourceFlowId, returns just that bot.",
     inputSchema: { botId: z.string() },
@@ -1655,25 +1931,26 @@ export const TOOLS: GambotTool[] = [
     description:
       "Create a bot that automatically replies to an incoming WhatsApp message. Trigger on specific keyword(s) " +
       "(matchType 'equals' or 'contains') or on ANY incoming message (anyMessage=true). The reply is an approved " +
-      "template (replyTemplateName) or free text (replyText — only delivers inside the 24h service window). " +
-      "── OPTIONAL ENHANCEMENTS (regular/free-text replies only — full parity with the visual Bot Builder): " +
-      "• contextCheck: verify the incoming reply is on-topic before advancing ('בדיקת הקשר') — pass contextPrompt to " +
+      "template (replyTemplateName) or free text (replyText â€” only delivers inside the 24h service window). " +
+      "â”€â”€ OPTIONAL ENHANCEMENTS (regular/free-text replies only â€” full parity with the visual Bot Builder): " +
+      "â€¢ contextCheck: verify the incoming reply is on-topic before advancing ('×‘×“×™×§×ª ×”×§×©×¨') â€” pass contextPrompt to " +
       "define what counts as in-context (auto-defaulted if omitted). " +
-      "• aiCompose: instead of a fixed replyText, let Gambot AI phrase the reply in real time from a short instruction " +
+      "â€¢ aiCompose: instead of a fixed replyText, let Gambot AI phrase the reply in real time from a short instruction " +
       "(aiComposePrompt); sent as 'Gambot AI'. " +
-      "• outsideHoursMessage: send a DIFFERENT reply text outside the org's business hours. " +
-      "• reminders: follow-up reminders on the primary flow if the contact doesn't respond.",
+      "â€¢ outsideHoursMessage: send a DIFFERENT reply text outside the org's business hours. " +
+      "â€¢ reminders: follow-up reminders on the primary flow if the contact doesn't respond.",
     inputSchema: {
       name: z.string().describe("Internal bot name."),
       keywords: z.array(z.string()).optional().describe("Keyword(s) that trigger the reply. Omit and set anyMessage=true to catch everything."),
       matchType: z.enum(["equals", "contains"]).optional().describe("How to match keywords. Default 'equals'."),
+      keywordsJoin: z.enum(["OR", "AND"]).optional().describe("How several keywords combine in the ONE row. Default OR = any one word fires. AND = the message must contain ALL words (forces matchType contains)."),
       anyMessage: z.boolean().optional().describe("Reply to ANY incoming message (ignores keywords)."),
       replyTemplateName: z.string().optional().describe("Approved template to send as the reply."),
       replyText: z.string().optional().describe("Free-text reply (used when no template is given)."),
-      contextCheck: z.boolean().optional().describe("Enable an AI CONTEXT check ('בדיקת הקשר') on the incoming reply — verify it's on-topic before advancing."),
+      contextCheck: z.boolean().optional().describe("Enable an AI CONTEXT check ('×‘×“×™×§×ª ×”×§×©×¨') on the incoming reply â€” verify it's on-topic before advancing."),
       contextPrompt: z.string().optional().describe("What counts as an in-context reply (used when contextCheck is on). Auto-defaulted if omitted."),
       aiCompose: z.boolean().optional().describe("Let Gambot AI phrase the reply live instead of sending fixed replyText (regular replies only)."),
-      aiComposePrompt: z.string().optional().describe("Short instruction for aiCompose — what the AI should write."),
+      aiComposePrompt: z.string().optional().describe("Short instruction for aiCompose â€” what the AI should write."),
       outsideHoursMessage: z.string().optional().describe("Alternative reply text to send OUTSIDE business hours (regular replies only)."),
       reminders: z
         .array(
@@ -1693,9 +1970,12 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_create_template_button_autoreply",
     title: "Create auto-reply on template button click",
     description:
-      "Create a bot that reacts when a contact taps a quick-reply BUTTON on a template you sent (e.g. after a campaign). " +
-      "For each button give the reply (template or text) — perfect for 'when they click X, send Y'. " +
-      "The button title must match the template's button exactly.",
+      "Create ONE standalone bot that reacts when a contact taps a quick-reply BUTTON on a template you sent (e.g. after a campaign). " +
+      "For each button give the reply (template or text) â€” perfect for 'when they click X, send Y'. " +
+      "The button title must match the template's button exactly. " +
+      "âš ï¸ NOT for building menus / multi-level conversations: do NOT call this once per menu level or chain it to emulate " +
+      "sub-menus (that creates disconnected fragments). A multi-level menu is ONE bot â€” use gambot_create_bot with nested " +
+      "switchCase steps (see the server instructions: 'ONE CONVERSATION = ONE BOT').",
     inputSchema: {
       name: z.string(),
       templateName: z.string().describe("The template whose buttons are being clicked."),
@@ -1716,12 +1996,13 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_create_menu_bot",
     title: "Create menu bot",
     description:
-      "Create a menu bot: an opening template with quick-reply buttons that route each tap to a reply. " +
+      "Create a SINGLE-LEVEL menu bot: an opening template with quick-reply buttons that route each tap to ONE reply " +
+      "(no sub-menus â€” for 2+ levels use gambot_create_bot with a nested steps[] tree instead). " +
       "Provide openingTemplateName and options (each button + its reply template/text). " +
       "Start the menu for a contact by sending the opening template (e.g. via a campaign). " +
       "Each option's free-text reply can be enhanced (Bot Builder parity): aiCompose + aiComposePrompt (Gambot AI " +
       "phrases it live) and outsideHoursMessage (different text outside business hours). Add reminders[] to send " +
-      "follow-ups on the primary/main flow if the contact goes quiet ('תזכורות בפלואו הראשי').",
+      "follow-ups on the primary/main flow if the contact goes quiet ('×ª×–×›×•×¨×•×ª ×‘×¤×œ×•××• ×”×¨××©×™').",
     inputSchema: {
       name: z.string(),
       openingTemplateName: z.string().describe("Template that shows the menu buttons."),
@@ -1755,13 +2036,13 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_deploy_bot_package",
     title: "Deploy a complete bot (main + activator + human-intervention cancel)",
     description:
-      "Deploy a WHOLE bot in one call — the way the Bot Builder does it — instead of wiring pieces separately. " +
-      "It creates, in order: (1) the MAIN bot, (2) its ACTIVATOR (מפעיל — the trigger that starts it), and " +
-      "(3) the HUMAN-INTERVENTION CANCEL (ביטול בוט בהתערבות אנושית — stops the bot the instant a human agent " +
+      "Deploy a WHOLE bot in one call â€” the way the Bot Builder does it â€” instead of wiring pieces separately. " +
+      "It creates, in order: (1) the MAIN bot, (2) its ACTIVATOR (×ž×¤×¢×™×œ â€” the trigger that starts it), and " +
+      "(3) the HUMAN-INTERVENTION CANCEL (×‘×™×˜×•×œ ×‘×•×˜ ×‘×”×ª×¢×¨×‘×•×ª ×× ×•×©×™×ª â€” stops the bot the instant a human agent " +
       "replies), all linked by one sourceFlowId so they turn on/off together. " +
       "botType 'menu' = an opening template with quick-reply buttons routed to replies (needs openingTemplateName + " +
       "options; the activator SENDS that opening template to start the bot). botType 'keyword' = reply to a keyword/" +
-      "any message (self-activating — its own keyword IS the activator, so no separate activator is made). " +
+      "any message (self-activating â€” its own keyword IS the activator, so no separate activator is made). " +
       "Choose how the menu bot STARTS with activator.type: 'keyword'/'any_message' (a contact texts in), " +
       "'inactivity' (no message in noContactDays days), or 'campaign_lead' (a lead arrived from an ad/campaign). " +
       "AI / combined bots (Gambot AI) are built in the Bot Builder app because they need a Gambot AI configuration. " +
@@ -1787,10 +2068,11 @@ export const TOOLS: GambotTool[] = [
         .describe("MENU bots: one entry per menu button and its reply."),
       keywords: z.array(z.string()).optional().describe("KEYWORD bots: keyword(s) that trigger the reply."),
       matchType: z.enum(["equals", "contains"]).optional().describe("KEYWORD bots: how to match keywords. Default 'equals'."),
+      keywordsJoin: z.enum(["OR", "AND"]).optional().describe("KEYWORD bots: how several keywords combine in the ONE row. Default OR (any word). AND = message must contain ALL words (forces contains)."),
       anyMessage: z.boolean().optional().describe("KEYWORD bots: reply to ANY incoming message (ignores keywords)."),
       replyTemplateName: z.string().optional().describe("KEYWORD bots: approved template to send as the reply."),
       replyText: z.string().optional().describe("KEYWORD bots: free-text reply (only delivers inside the 24h window)."),
-      contextCheck: z.boolean().optional().describe("KEYWORD bots: enable an AI CONTEXT check ('בדיקת הקשר') on the incoming reply — verify it's on-topic before advancing."),
+      contextCheck: z.boolean().optional().describe("KEYWORD bots: enable an AI CONTEXT check ('×‘×“×™×§×ª ×”×§×©×¨') on the incoming reply â€” verify it's on-topic before advancing."),
       contextPrompt: z.string().optional().describe("KEYWORD bots: what counts as an in-context reply (used with contextCheck). Auto-defaulted if omitted."),
       aiCompose: z.boolean().optional().describe("KEYWORD bots: let Gambot AI phrase the reply live instead of fixed replyText (regular replies only)."),
       aiComposePrompt: z.string().optional().describe("KEYWORD bots: short instruction for aiCompose."),
@@ -1804,12 +2086,13 @@ export const TOOLS: GambotTool[] = [
           })
         )
         .optional()
-        .describe("Follow-up reminders on the primary/main flow ('תזכורות בפלואו הראשי') if the contact doesn't respond. Applies to menu & keyword bots."),
+        .describe("Follow-up reminders on the primary/main flow ('×ª×–×›×•×¨×•×ª ×‘×¤×œ×•××• ×”×¨××©×™') if the contact doesn't respond. Applies to menu & keyword bots."),
       activator: z
         .object({
           type: z.enum(["keyword", "any_message", "inactivity", "campaign_lead", "none"]).describe("How a MENU bot starts. 'none' = you send the opening template yourself (e.g. via a campaign)."),
           keywords: z.array(z.string()).optional().describe("For type 'keyword': the keyword(s) that start the bot."),
           matchType: z.enum(["equals", "contains"]).optional(),
+          keywordsJoin: z.enum(["OR", "AND"]).optional().describe("Default OR. AND = message must contain ALL keywords (forces contains)."),
           noContactDays: z.number().optional().describe("For type 'inactivity': start after this many days with no communication (default 7)."),
           fromAds: z.boolean().optional().describe("For type 'inactivity': ALSO start when the contact arrived from a paid ad/campaign."),
         })
@@ -1827,8 +2110,8 @@ export const TOOLS: GambotTool[] = [
     title: "Activate / deactivate bot",
     description:
       "Turn a bot on (active) or off (inactive). By default this toggles ONE botomation. Set includePackage=true " +
-      "to toggle the WHOLE bot — every botomation sharing its sourceFlowId (the main bot + its activator/trigger + " +
-      "the human-intervention cancel + the Gambot AI answerer) — which is what a user usually means by 'turn the " +
+      "to toggle the WHOLE bot â€” every botomation sharing its sourceFlowId (the main bot + its activator/trigger + " +
+      "the human-intervention cancel + the Gambot AI answerer) â€” which is what a user usually means by 'turn the " +
       "bot on/off'. Use gambot_get_bot_package first if you're unsure what will be affected.",
     inputSchema: {
       botId: z.string(),
@@ -1842,6 +2125,19 @@ export const TOOLS: GambotTool[] = [
       c.post(`/bots/${encodeURIComponent(a.botId)}/status`, { status: a.status, includePackage: a.includePackage }),
   },
   {
+    name: "gambot_update_bot",
+    title: "Update bot (full object)",
+    description:
+      "Update an EXISTING bot/botomation instead of creating a duplicate. Workflow: gambot_get_bot â†’ change what is needed â†’ send the " +
+      "WHOLE bot back here (name, status, isBot, steps[], primaryFlowSettings, â€¦) â€” the object is replaced, so include every step you want to keep. " +
+      "To only turn it on/off use gambot_set_bot_status.",
+    inputSchema: {
+      botId: z.string().describe("Id of the bot to update (from gambot_list_bots)."),
+      bot: z.record(z.any()).describe("The full botomation object (as returned by gambot_get_bot) with your changes."),
+    },
+    run: (c, a) => c.patch(`/bots/${encodeURIComponent(a.botId)}`, { bot: a.bot }),
+  },
+  {
     name: "gambot_delete_bot",
     title: "Delete bot",
     description: "Delete a bot/automation by id.",
@@ -1853,15 +2149,19 @@ export const TOOLS: GambotTool[] = [
     title: "Create bot (advanced, full step schema)",
     description:
       "Advanced: create a bot from a full botomation object when the high-level builders aren't enough. " +
-      "steps[]: step 1 is the trigger (action 'IncomingMessage', …), the rest are actions ('SendMessage','switchCase'," +
-      "'Condition','GambotAi','Delay','GambotAction',…). Use {{Step_1_PhoneNumber}} / {{Step_1_Message}} placeholders. " +
-      "── STEP CONFIG FEATURES you can set (parity with the visual Bot Builder): " +
-      "• On a REGULAR IncomingMessage trigger config → aiContextGate:{enabled:true,prompt,model:'gpt-4o-mini',onExhausted:'advance'} " +
-      "for an on-topic CONTEXT check ('בדיקת הקשר'). " +
-      "• On a REGULAR SendMessage config → aiCompose:{enabled:true,prompt,assignToGambotAiAfter:true} to have Gambot AI phrase it live, " +
+      "USE THIS for ANY multi-level conversation (menu â†’ sub-menu â†’ answers): put the WHOLE tree in ONE call with isBot=true, " +
+      "nesting each level inside switchCase cases[].actions as [SendMessage(template) â†’ IncomingMessage(template + buttons) â†’ " +
+      "switchCase on {{Step_<path>_ButtonText}}]. Never split a conversation into one botomation per step/button. " +
+      "A full worked example is in the server instructions ('ONE CONVERSATION = ONE BOT'). " +
+      "steps[]: step 1 is the trigger (action 'IncomingMessage', â€¦), the rest are actions ('SendMessage','switchCase'," +
+      "'Condition','GambotAi','Delay','GambotAction',â€¦). Use {{Step_1_PhoneNumber}} / {{Step_1_Message}} placeholders. " +
+      "â”€â”€ STEP CONFIG FEATURES you can set (parity with the visual Bot Builder): " +
+      "â€¢ On a REGULAR IncomingMessage trigger config â†’ aiContextGate:{enabled:true,prompt,model:'gpt-4o-mini',onExhausted:'advance'} " +
+      "for an on-topic CONTEXT check ('×‘×“×™×§×ª ×”×§×©×¨'). " +
+      "â€¢ On a REGULAR SendMessage config â†’ aiCompose:{enabled:true,prompt,assignToGambotAiAfter:true} to have Gambot AI phrase it live, " +
       "and businessHoursAlternative:{enabled:true,outsideHoursMessage:'...'} for a different text outside business hours. " +
-      "• On the botomation itself → primaryFlowSettings:{reminderEnabled:true,reminders:[{afterMinutes,message,action}]} for follow-up reminders. " +
-      "Prefer gambot_create_keyword_autoreply / _template_button_autoreply / _menu_bot / _deploy_bot_package for common cases — they expose " +
+      "â€¢ On the botomation itself â†’ primaryFlowSettings:{reminderEnabled:true,reminders:[{afterMinutes,message,action}]} for follow-up reminders. " +
+      "Prefer gambot_create_keyword_autoreply / _template_button_autoreply / _menu_bot / _deploy_bot_package for common cases â€” they expose " +
       "contextCheck, aiCompose, outsideHoursMessage and reminders as simple params.",
     inputSchema: {
       name: z.string(),
@@ -1878,18 +2178,18 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/bots", a),
   },
 
-  // ── Gambot AI "brain" (how the AI answers) ─────────────────────────────────────
+  // â”€â”€ Gambot AI "brain" (how the AI answers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // The AI CONFIG (purpose, tone, instructions, language, knowledge Q&A) that a 'gambot_ai' botomation
   // hands the chat to. SEPARATE from the botomation (api/v1/bots): the brain = HOW it answers; the
   // botomation = WHEN it answers (trigger contactOwner == "Gambot AI"). On signup Gambot scans the org's
-  // website and AUTO-BUILDS a brain + a "GAMBOT AI AGENT" botomation (seeded inactive) — so usually you
+  // website and AUTO-BUILDS a brain + a "GAMBOT AI AGENT" botomation (seeded inactive) â€” so usually you
   // LIST the existing brain and UPGRADE it rather than create a new one.
   {
     name: "gambot_list_ai",
     title: "List Gambot AI models",
     description:
       "List the organization's Gambot AI 'brains' (how the AI answers: purpose, tone, language, Q&A count). " +
-      "Most orgs already have one auto-built from their website at signup — find it here before creating a new one. " +
+      "Most orgs already have one auto-built from their website at signup â€” find it here before creating a new one. " +
       "Pair a brain with its botomation via gambot_list_bots (role 'gambot_ai').",
     inputSchema: {},
     run: (c) => c.get("/ai"),
@@ -1905,7 +2205,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_update_ai",
     title: "Update (upgrade) Gambot AI model",
     description:
-      "Update/upgrade an existing Gambot AI brain. PATCH semantics — only the fields you pass change; everything " +
+      "Update/upgrade an existing Gambot AI brain. PATCH semantics â€” only the fields you pass change; everything " +
       "else (including learned Q&A, style examples and the knowledge-base file) is kept. Use this to refine the " +
       "auto-built AI: sharpen its purpose/instructions, set the tone or language, add Q&A, or toggle escalate-to-human.",
     inputSchema: {
@@ -1921,7 +2221,7 @@ export const TOOLS: GambotTool[] = [
       qnAPairs: z
         .array(z.object({ question: z.string(), answer: z.string() }))
         .optional()
-        .describe("Knowledge Q&A pairs (REPLACES the live set — send the full list you want)."),
+        .describe("Knowledge Q&A pairs (REPLACES the live set â€” send the full list you want)."),
     },
     run: (c, a) => {
       const { id, ...rest } = a as Record<string, unknown>;
@@ -1932,12 +2232,12 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_create_ai",
     title: "Create Gambot AI model",
     description:
-      "Create a NEW Gambot AI brain. Only do this if the org has none (check gambot_list_ai first — most orgs already " +
+      "Create a NEW Gambot AI brain. Only do this if the org has none (check gambot_list_ai first â€” most orgs already " +
       "have one auto-built from their website). After creating, wire it to a botomation whose trigger is " +
       "contactOwner == 'Gambot AI' (built in the Bot Builder app) and route contacts by assigning owner = 'Gambot AI'.",
     inputSchema: {
       botName: z.string().describe("Display name of the AI."),
-      botPurpose: z.string().optional().describe("What the AI is for (customer support, FAQ, sales, …)."),
+      botPurpose: z.string().optional().describe("What the AI is for (customer support, FAQ, sales, â€¦)."),
       botTone: z.string().optional().describe("Tone: formal | casual | friendly | custom."),
       botInstructions: z.string().optional().describe("Free-text system instructions."),
       botLanguage: z.string().optional().describe("Primary language, e.g. 'he' or 'en'."),
@@ -1949,15 +2249,15 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/ai", a),
   },
 
-  // ── Onboarding (create account / payment / connect WhatsApp) ─────────────────
+  // â”€â”€ Onboarding (create account / payment / connect WhatsApp) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_check_organization",
     title: "Check organization (onboarding)",
     description:
-      "Check whether an organization already exists for a company + tax id (ח.פ/ת.ז), and whether an incomplete onboarding can be resumed. Use before creating a new trial.",
+      "Check whether an organization already exists for a company + tax id (×—.×¤/×ª.×–), and whether an incomplete onboarding can be resumed. Use before creating a new trial.",
     inputSchema: {
       companyName: z.string(),
-      companyIdNumber: z.string().describe("9-digit company/tax id (ח.פ/ת.ז)."),
+      companyIdNumber: z.string().describe("9-digit company/tax id (×—.×¤/×ª.×–)."),
     },
     run: (c, a) => c.post("/onboarding/check-organization", a),
   },
@@ -1973,7 +2273,7 @@ export const TOOLS: GambotTool[] = [
     title: "Search phone numbers to buy (by country)",
     description:
       "List phone numbers available to purchase for a country (via Twilio), so you can pick one to buy as the account's SIM/number. " +
-      "Pass the chosen phoneNumber to gambot_create_trial_account / gambot_create_paid_account as simInfo.selectedSimNumber with simInfo.purchaseInTwilio=true.",
+      "Pass the chosen phoneNumber to gambot_create_paid_account (or gambot_create_paid_account_self_serve with no API key) as simInfo.selectedSimNumber with simInfo.purchaseInTwilio=true. A bought number is prepaid - never a trial.",
     inputSchema: {
       countryCode: z.string().describe("ISO-3166 alpha-2 country code, e.g. \"US\", \"GB\", \"IL\"."),
       numberType: z.enum(["local", "mobile", "tollfree", "national"]).optional().describe("Default local."),
@@ -1985,15 +2285,14 @@ export const TOOLS: GambotTool[] = [
     title: "Create trial account",
     description:
       "Create a new FREE-TRIAL organization + first user (no card required). Login credentials (temp password) are emailed & WhatsApp'd to the contact. " +
-      "WhatsApp/number options: useFreeNumber (Meta test number) · useCoexisting (existing WhatsApp Business number in simInfo.simNumberEntered) · " +
-      "BYO SIM (the customer's own number in simInfo.simNumberEntered) · Buy a SIM from us (simInfo.purchaseInTwilio=true + simInfo.selectedSimNumber from gambot_search_available_numbers). " +
-      "GLOBAL: send companyInfo.timezone (IANA) and companyInfo.country (ISO-3166 alpha-2) — they drive scheduling and locale. Neither hard-fails: a missing/invalid timezone is derived from country (else defaults to Asia/Jerusalem). " +
+      "WhatsApp/number options: (Gambot does NOT provide any free / test / sandbox numbers - never offer or suggest one) Â· useCoexisting (existing WhatsApp Business number in simInfo.simNumberEntered) Â· " +
+      "BYO SIM (the customer's own number in simInfo.simNumberEntered) Â· Buying a SIM/number from us is NOT available on a trial (it is prepaid with no trial) - use gambot_create_paid_account for that. " +
+      "GLOBAL: send companyInfo.timezone (IANA) and companyInfo.country (ISO-3166 alpha-2) â€” they drive scheduling and locale. Neither hard-fails: a missing/invalid timezone is derived from country (else defaults to Asia/Jerusalem). " +
       "For a paid account with a card on file (no trial) use gambot_create_paid_account instead. After creating, connect WhatsApp via the returned wabaConnectUrl or gambot_exchange_waba_token.",
     inputSchema: {
       plan: z.string().optional().describe("Basic / Premium / Enterprise."),
       currency: z.string().optional().describe("ILS / USD / EUR / GBP."),
       payEach: z.enum(["monthly", "yearly"]).optional(),
-      useFreeNumber: z.boolean().optional().describe("Use Meta's free TEST number (testing only)."),
       useCoexisting: z.boolean().optional().describe("Use an existing WhatsApp Business number (coexistence)."),
       companyInfo: z
         .record(z.any())
@@ -2005,7 +2304,7 @@ export const TOOLS: GambotTool[] = [
       simInfo: z
         .record(z.any())
         .optional()
-        .describe("{ hasSim, simNumberEntered, selectedSimNumber, purchaseInTwilio }. Set purchaseInTwilio=true + selectedSimNumber to buy a number from us."),
+        .describe("{ hasSim, simNumberEntered }. Trial accounts use the customer's own number (hasSim=true + simNumberEntered) or coexistence. Buying a number from Gambot is prepaid-only: use gambot_create_paid_account (purchaseInTwilio + selectedSimNumber)."),
     },
     run: (c, a) => c.post("/onboarding/create-trial", a),
   },
@@ -2013,15 +2312,14 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_create_paid_account",
     title: "Create paid account (no trial, card required)",
     description:
-      "Create a new organization that goes STRAIGHT TO PAID — no free trial month. A payment method is MANDATORY: pass a `card` object; " +
-      "the card is verified with the clearing provider, its token is saved, and billing starts immediately (first charge on the next billing run). " +
+      "Create a new organization that goes STRAIGHT TO PAID â€” no free trial month. A payment method is MANDATORY: pass a `card` object; " +
+      "the card is verified first, then (if buying a number: simInfo.purchaseInTwilio=true + simInfo.selectedSimNumber) the number is bought and the FIRST period (plan + SIM) is charged immediately - prepaid, no trial for the subscription or the SIM. If the charge fails nothing is created and the number is released. The card token is then saved for renewals. " +
       "Use this when an AI agent has the customer's card and should provision a paying account in one call. Same number options and the same graceful " +
       "companyInfo.timezone/country handling as gambot_create_trial_account (neither hard-fails). The raw card is sent only to the PCI-compliant clearing provider and never stored.",
     inputSchema: {
       plan: z.string().optional().describe("Basic / Premium / Enterprise."),
       currency: z.string().optional(),
       payEach: z.enum(["monthly", "yearly"]).optional(),
-      useFreeNumber: z.boolean().optional(),
       useCoexisting: z.boolean().optional(),
       companyInfo: z
         .record(z.any())
@@ -2060,7 +2358,8 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_create_payment_link",
     title: "Create payment link",
     description:
-      "Build a secure hosted payment link (Tranzila) to add a card for an organization. Card data is never handled by the API — share the URL with the customer; the card token is saved on success.",
+      "ONBOARDING ONLY â€” build a hosted link where a NEW Gambot customer saves a card on file for their Gambot subscription. Card data is never handled by the API â€” share the URL; the card token is saved on success. " +
+      "NOT for charging an organization's own customers â€” for that use gambot_create_clearing_payment_link.",
     inputSchema: {
       organizationName: z.string(),
       plan: z.string().optional(),
@@ -2077,11 +2376,47 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/onboarding/payment-link", a),
   },
   {
+    name: "gambot_get_clearing_status",
+    title: "Get clearing (×¡×œ×™×§×”) status",
+    description:
+      "Check whether THIS organization has a credit-card clearing provider (×¡×œ×™×§×”) configured in Settings â†’ Clearing: activeProvider, enabledProviders, testMode and the auto-invoice settings. " +
+      "`canCreatePaymentLinks` tells you if gambot_create_clearing_payment_link will work; when false the `reason` says what a human must configure in the app. Call this BEFORE offering a payment link.",
+    inputSchema: {},
+    run: (c) => c.get("/payments/clearing"),
+  },
+  {
+    name: "gambot_create_clearing_payment_link",
+    title: "Create clearing payment link (charge a customer)",
+    description:
+      "Create a payment link (×§×™×©×•×¨ ×œ×ª×©×œ×•×) to charge one of the organization's OWN customers by credit card, through the organization's configured clearing provider (×¡×œ×™×§×”). " +
+      "Requires clearing to be set up (see gambot_get_clearing_status) â€” otherwise error `clearing_not_configured` and a human must configure it in Settings â†’ Clearing. " +
+      "Give either amount (+ description), items[], or invoiceId / quoteId (amount defaults to the invoice's open balance / quote total and customer details are copied; the link is attached to that document). " +
+      "payments = max installments. Returns { transactionId, shareUrl } â€” send shareUrl to the customer (e.g. with gambot_send_text). The transaction appears in the app's Transactions screen " +
+      "(track with gambot_get_transaction); when the org enabled auto-invoice, the accounting document is issued automatically after payment. " +
+      "Different from gambot_create_payment_link (that one is the Gambot-subscription onboarding link).",
+    inputSchema: {
+      amount: z.number().optional().describe("Amount to charge in ILS (VAT-inclusive by default)."),
+      description: z.string().optional().describe("What the payment is for (shown to the customer)."),
+      customerName: z.string().optional(),
+      customerPhone: z.string().optional(),
+      customerEmail: z.string().optional(),
+      payments: z.number().int().min(1).optional().describe("Maximum installments (default 1)."),
+      vatInclusive: z.boolean().optional().describe("Whether amount already includes VAT (default true)."),
+      items: z
+        .array(z.object({ name: z.string(), unitPrice: z.number(), quantity: z.number().optional() }))
+        .optional()
+        .describe("Line items (amount = their sum when amount is omitted)."),
+      invoiceId: z.string().optional().describe("Pay an existing invoice (amount defaults to its open balance)."),
+      quoteId: z.string().optional().describe("Pay an existing quote (amount defaults to its total)."),
+    },
+    run: (c, a) => c.post("/payment-links", a),
+  },
+  {
     name: "gambot_get_waba_connect_link",
     title: "Get WhatsApp (WABA) connect link",
     description:
       "Get the hosted page URL where the customer completes Meta Embedded Signup (the Facebook popup) to connect their WhatsApp Business account. " +
-      "REQUIRES AN EXISTING ACCOUNT: call gambot_create_trial_account FIRST (no key/form needed) and pass the exact organizationName it returned — never invent one (a non-existent organization is refused with ORGANIZATION_NOT_FOUND). " +
+      "REQUIRES AN EXISTING ACCOUNT: call gambot_create_trial_account FIRST (no key/form needed) and pass the exact organizationName it returned â€” never invent one (a non-existent organization is refused with ORGANIZATION_NOT_FOUND). " +
       "The create call already returns wabaConnectUrl, so you normally don't need this tool right after creating.",
     inputSchema: { organization: z.string().describe("The organizationName returned by gambot_create_trial_account. Must already exist.") },
     run: (c, a) => c.get("/onboarding/waba/connect-link", { organization: a.organization }),
@@ -2106,10 +2441,10 @@ export const TOOLS: GambotTool[] = [
     title: "Send onboarding verification code",
     description:
       "Send a 6-digit verification code to the customer's email AND WhatsApp. Public (no token). Required ONLY before creating a self-serve account that BUYS a phone number (proves the customer owns the email/phone, so we don't buy numbers for fake accounts). " +
-      "Returns { verificationId } — collect the code from the customer, then call gambot_verify_onboarding_code. Free number / co-existence / bring-your-own do NOT need this.",
+      "Returns { verificationId } â€” collect the code from the customer, then call gambot_verify_onboarding_code. Co-existence / bring-your-own do NOT need this (only buying a number does).",
     inputSchema: {
-      email: z.string().describe("Customer email — the code is sent here."),
-      phoneNumber: z.string().describe("Customer WhatsApp number (E.164) — the code is sent here too."),
+      email: z.string().describe("Customer email â€” the code is sent here."),
+      phoneNumber: z.string().describe("Customer WhatsApp number (E.164) â€” the code is sent here too."),
       name: z.string().optional(),
       companyName: z.string().optional(),
       companyIdNumber: z.string().optional(),
@@ -2120,7 +2455,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_verify_onboarding_code",
     title: "Verify onboarding code",
     description:
-      "Verify the 6-digit code the customer received (from gambot_send_onboarding_verification). Public (no token). On success returns { verified:true }; pass the same verificationId to gambot_create_trial_account to create an account that buys a phone number.",
+      "Verify the 6-digit code the customer received (from gambot_send_onboarding_verification). Public (no token). On success returns { verified:true }; pass the same verificationId to gambot_create_paid_account_self_serve to create a prepaid account that buys a phone number.",
     inputSchema: {
       verificationId: z.string().describe("From gambot_send_onboarding_verification."),
       code: z.string().describe("The 6-digit code the customer received by email/WhatsApp."),
@@ -2134,12 +2469,12 @@ export const TOOLS: GambotTool[] = [
       "Check where an organization is in onboarding: whether the account exists, a card is on file, and WhatsApp (WABA) is connected. " +
       "Use this to POLL after create-trial (Meta Embedded Signup finishes in the browser, not in the agent). Returns " +
       "{ accountCreated, cardOnFile, wabaConnected, status (not_found|account_created|connected), wabaConnectUrl, paymentUrl, nextStep }. " +
-      "Public — works without a token.",
+      "Public â€” works without a token.",
     inputSchema: { organization: z.string() },
     run: (c, a) => c.get("/onboarding/status", { organization: a.organization }),
   },
 
-  // ── Analytics & reporting (read-only KPIs; numbers match the in-app dashboard) ────────────────
+  // â”€â”€ Analytics & reporting (read-only KPIs; numbers match the in-app dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Period selection shared by most tools: period = today | yesterday | week | month | 30d | all
   // (default month), or pass explicit from/to (yyyy-MM-dd). Day boundaries follow Israel time.
   {
@@ -2147,7 +2482,7 @@ export const TOOLS: GambotTool[] = [
     title: "Analytics summary (KPIs)",
     description:
       "One-shot KPI snapshot for a period: WhatsApp message volume (incoming/outgoing + per-agent breakdown), " +
-      "new contacts (incl. from CTWA ads), leads (created/won/open), support tickets (פניות: created/closed/open), " +
+      "new contacts (incl. from CTWA ads), leads (created/won/open), support tickets (×¤× ×™×•×ª: created/closed/open), " +
       "tasks (created/completed/open/overdue) and bots (runs/completed/active/failed/completionRate). " +
       "USE THIS to answer 'how are we doing today / this month', " +
       "'how many messages did we send', 'how many new leads', etc. Set userId to scope to a single team member; " +
@@ -2169,7 +2504,7 @@ export const TOOLS: GambotTool[] = [
     title: "Message volume analytics",
     description:
       "WhatsApp message volume for a period: total, incoming, outgoing, how many were sent by bots vs humans, " +
-      "and a per-agent breakdown (byAgent) — how many messages each user sent. Use for 'how many messages went " +
+      "and a per-agent breakdown (byAgent) â€” how many messages each user sent. Use for 'how many messages went " +
       "out today', 'inbound vs outbound this month', 'who sent the most messages'.",
     inputSchema: {
       period: z.enum(["today", "yesterday", "week", "month", "30d", "all"]).optional(),
@@ -2188,13 +2523,13 @@ export const TOOLS: GambotTool[] = [
     description:
       "Read the ACTUAL message CONTENT across ALL conversations for a time window (default: today) as a flat, " +
       "time-ordered feed. Each message has: time, phone, contactName, direction (incoming=from the customer / " +
-      "outgoing=from the team or bot), sender (customer name, agent name, 'Gambot AI', 'Gambot MCP', …), senderId, " +
-      "type, messageType and text. THIS is the tool for QUALITATIVE questions about conversations — e.g. " +
+      "outgoing=from the team or bot), sender (customer name, agent name, 'Gambot AI', 'Gambot MCP', â€¦), senderId, " +
+      "type, messageType and text. THIS is the tool for QUALITATIVE questions about conversations â€” e.g. " +
       "'how did my employees reply today?', 'which customers seem upset / frustrated?', 'summarize today's chats', " +
       "'did anyone ask about prices / cancel?', 'how did agent X handle their chats?'. After calling it, analyze the " +
       "returned messages yourself to answer. For pure COUNTS use gambot_analytics_messages instead (cheaper). " +
       "Filter by direction, by userId (one agent's replies), or by phone (a single conversation). Returns up to " +
-      "`limit` most-recent messages (truncated=true means older ones were dropped — narrow the window or raise limit).",
+      "`limit` most-recent messages (truncated=true means older ones were dropped â€” narrow the window or raise limit).",
     inputSchema: {
       period: z.enum(["today", "yesterday", "week", "month", "30d", "all"]).optional()
         .describe("Time window. Default: today. Or pass from/to."),
@@ -2203,7 +2538,7 @@ export const TOOLS: GambotTool[] = [
       direction: z.enum(["incoming", "outgoing"]).optional()
         .describe("Only inbound (customer) or only outbound (team/bot) messages."),
       userId: z.string().optional().describe("Only messages sent by this team member (their uID)."),
-      phone: z.string().optional().describe("Limit to a single conversation (customer phone, e.g. 9725…)."),
+      phone: z.string().optional().describe("Limit to a single conversation (customer phone, e.g. 9725â€¦)."),
       limit: z.number().int().optional().describe("Max messages to return (default 500, max 2000; most-recent kept)."),
     },
     run: (c, a) => c.get("/analytics/transcript", {
@@ -2254,10 +2589,10 @@ export const TOOLS: GambotTool[] = [
   },
   {
     name: "gambot_analytics_cases",
-    title: "Support tickets (פניות) analytics",
+    title: "Support tickets (×¤× ×™×•×ª) analytics",
     description:
-      "Support tickets / פניות for the period: created, closed, resolved, still-open, SLA compliance and a breakdown by stage. " +
-      "('cases' is Gambot's internal name for פניות / inquiries / tickets.)",
+      "Support tickets / ×¤× ×™×•×ª for the period: created, closed, resolved, still-open, SLA compliance and a breakdown by stage. " +
+      "('cases' is Gambot's internal name for ×¤× ×™×•×ª / inquiries / tickets.)",
     inputSchema: {
       period: z.enum(["today", "yesterday", "week", "month", "30d", "all"]).optional(),
       from: z.string().optional(),
@@ -2306,7 +2641,7 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get("/analytics/bots", { period: a.period, from: a.from, to: a.to }),
   },
 
-  // ── Webhooks (event forwarding) ─────────────────────────────────────────────
+  // â”€â”€ Webhooks (event forwarding) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_register_webhook",
     title: "Register event-forwarding webhook",
@@ -2315,7 +2650,7 @@ export const TOOLS: GambotTool[] = [
       "Each delivery is a JSON 'envelope': { type, event, types[], organization, receivedAt, meta_obj } where meta_obj is Meta's raw payload, " +
       "plus request headers X-Gambot-Organization and X-Gambot-Event. Provide the destination `url` (https recommended); optionally an `authHeader` " +
       "we send verbatim as the Authorization header on every call, and `events` toggles to choose which event types to receive (all on by default). " +
-      "This is the programmatic equivalent of Settings → Event Forwarding, so it also shows up in the console. " +
+      "This is the programmatic equivalent of Settings â†’ Event Forwarding, so it also shows up in the console. " +
       "After registering, verify it with gambot_test_webhook. To stop delivery use gambot_delete_webhook.",
     inputSchema: {
       url: z.string().describe("Destination URL that will receive POSTs, e.g. https://your-server.com/webhook"),
@@ -2352,7 +2687,7 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_test_webhook",
     title: "Send a test webhook event",
     description:
-      "Fire a synthetic sample 'incoming_message' envelope (flagged test:true) at the registered webhook URL — or at an override `url` passed here — and return the delivery result: { delivered, statusCode, durationMs, responsePreview }. " +
+      "Fire a synthetic sample 'incoming_message' envelope (flagged test:true) at the registered webhook URL â€” or at an override `url` passed here â€” and return the delivery result: { delivered, statusCode, durationMs, responsePreview }. " +
       "Use this to confirm your endpoint actually receives Gambot's calls. The attempt is recorded in the delivery log.",
     inputSchema: {
       url: z.string().optional().describe("Optional override URL to test instead of the registered one (lets you test before registering)."),
@@ -2361,12 +2696,12 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.post("/webhooks/test", { url: a.url, authHeader: a.authHeader }),
   },
 
-  // ── Connections (connected integrations) ────────────────────────────────────
+  // â”€â”€ Connections (connected integrations) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_connections",
     title: "List connections",
     description:
-      "List the organization's connected integrations (the same as Settings → Connections): email & calendar OAuth accounts (Google/Microsoft), Facebook/Meta lead-ads pages, shop/CRM links, plus the org's WhatsApp numbers. " +
+      "List the organization's connected integrations (the same as Settings â†’ Connections): email & calendar OAuth accounts (Google/Microsoft), Facebook/Meta lead-ads pages, shop/CRM links, plus the org's WhatsApp numbers. " +
       "Only non-secret metadata is returned (ids, providers, status, account email). Use a connection's id as the connectionId elsewhere (e.g. gambot_list_facebook_lead_forms, gambot_create_facebook_lead_bot) and its provider ('google'/'microsoft') to pick a mailbox/calendar.",
     inputSchema: {
       type: z.string().optional().describe("Optional connectionType filter, e.g. 'FacebookLeadAds'."),
@@ -2374,13 +2709,13 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get("/connections", { type: a.type }),
   },
 
-  // ── Email (transactional send + email campaigns) ────────────────────────────
+  // â”€â”€ Email (transactional send + email campaigns) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_send_email",
     title: "Send email",
     description:
-      "Send a single email over a connected Google/Microsoft mailbox (Settings → Connections). Provide to, subject and body. " +
-      "Set isHtml=false for plain text. Optionally cc/bcc and a provider ('google'/'microsoft' or a connection id; blank ⇒ first available).",
+      "Send a single email over a connected Google/Microsoft mailbox (Settings â†’ Connections). Provide to, subject and body. " +
+      "Set isHtml=false for plain text. Optionally cc/bcc and a provider ('google'/'microsoft' or a connection id; blank â‡’ first available).",
     inputSchema: {
       to: z.string().describe("Recipient email address."),
       subject: z.string().describe("Email subject."),
@@ -2388,7 +2723,7 @@ export const TOOLS: GambotTool[] = [
       isHtml: z.boolean().optional().describe("Whether body is HTML (default true)."),
       cc: z.array(z.string()).optional().describe("Optional CC recipients."),
       bcc: z.array(z.string()).optional().describe("Optional BCC recipients."),
-      provider: z.string().optional().describe("Which mailbox to send from: 'google'/'microsoft' or a connection id. Blank ⇒ first available."),
+      provider: z.string().optional().describe("Which mailbox to send from: 'google'/'microsoft' or a connection id. Blank â‡’ first available."),
     },
     run: (c, a) =>
       c.post("/email/send", {
@@ -2401,68 +2736,274 @@ export const TOOLS: GambotTool[] = [
         provider: a.provider,
       }),
   },
+  // ── Email templates (תבניות מייל) ───────────────────────────────────────────
+  {
+    name: "gambot_list_email_templates",
+    title: "List email templates",
+    description:
+      "List the organization's saved email templates (compact: id, name, subject, isHtml, category, variables, attachment count). " +
+      "Use a template's id as templateId in gambot_create_email_campaign / gambot_send_test_email.",
+    inputSchema: {},
+    run: (c) => c.get("/email/templates"),
+  },
+  {
+    name: "gambot_get_email_template",
+    title: "Get email template",
+    description:
+      "Get one email template in full: subject, body, isHtml, variables (the {{names}} used), variableDefaults (default source per variable), attachments, mediaUrls, tags, category.",
+    inputSchema: { templateId: z.string() },
+    run: (c, a) => c.get(`/email/templates/${encodeURIComponent(a.templateId)}`),
+  },
+  {
+    name: "gambot_create_email_template",
+    title: "Create email template",
+    description:
+      "Create a reusable email template. The body may be PLAIN TEXT (line breaks preserved, links auto-detected, images as markdown ![alt](url)) or HTML (isHtml is inferred from the presence of tags). " +
+      "Variables are written as {{name}} in subject/body (Hebrew names are fine, e.g. {{שם החברה}}); {{name}} and {{email}} are always filled from the recipient. " +
+      "variableDefaults is the template's AUTOMATIC MAPPING (same model as the WhatsApp auto-mapping): per variable a fixed text, a contact field, or a field of ANY CRM table via { entity, field } — entity: contact | lead (latest lead) | case | quote | order | user (sending user) | org (business). Table mappings fill the variable when the template is picked for ONE recipient in the app (chat / contact / lead / case); campaigns only inherit fixed values and contact fields (they map per recipient / Excel column), botomations map inside the flow. " +
+      "FILES: to attach a file to the template (sent with EVERY email), host it first with gambot_upload_email_media (kind='attachment') and pass the returned `attachment` in attachments. " +
+      "To put an image INSIDE the body, host it with kind='image' and paste the returned markdown (plain-text body) or url (<img src> in HTML). " +
+      "Templates created here have no drag-and-drop design — only subject + body.",
+    inputSchema: {
+      name: z.string().describe("Template name."),
+      subject: z.string().optional().describe("Subject line (may contain {{variables}})."),
+      body: z.string().describe("Body: plain text (markdown image syntax allowed) or HTML."),
+      isHtml: z.boolean().optional().describe("Force HTML/plain-text; inferred from the body when omitted."),
+      category: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      variableDefaults: z
+        .record(z.any())
+        .optional()
+        .describe(
+          "Automatic mapping per variable name: { \"שם החברה\": \"Acme\" } (fixed value), { \"city\": { \"contactField\": \"city\" } } (contact field), or a CRM table field { \"סכום\": { \"entity\": \"lead\", \"field\": \"price\" } } — entity: contact|lead|case|quote|order|user|org. Omit a variable to leave it manual."
+        ),
+      attachments: z
+        .array(z.object({ name: z.string(), contentType: z.string().optional(), url: z.string() }))
+        .optional()
+        .describe("Files attached to every email sent with this template (from gambot_upload_email_media)."),
+      mediaUrls: z.array(z.string()).optional().describe("Image URLs used in the body (from gambot_upload_email_media kind='image')."),
+    },
+    run: (c, a) => c.post("/email/templates", a),
+  },
+  {
+    name: "gambot_update_email_template",
+    title: "Update email template",
+    description:
+      "Update an email template — send only the fields that change (name, subject, body, isHtml, category, tags, variableDefaults, attachments, mediaUrls). " +
+      "attachments REPLACES the whole attachment list (send [] to remove all). Existing campaigns keep their own saved variable mapping.",
+    inputSchema: {
+      templateId: z.string(),
+      name: z.string().optional(),
+      subject: z.string().optional(),
+      body: z.string().optional(),
+      isHtml: z.boolean().optional(),
+      category: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      variableDefaults: z.record(z.any()).optional(),
+      attachments: z
+        .array(z.object({ name: z.string(), contentType: z.string().optional(), url: z.string() }))
+        .optional(),
+      mediaUrls: z.array(z.string()).optional(),
+    },
+    run: (c, a) => {
+      const { templateId, ...rest } = a;
+      return c.patch(`/email/templates/${encodeURIComponent(templateId)}`, rest);
+    },
+  },
+  {
+    name: "gambot_delete_email_template",
+    title: "Delete email template",
+    description: "Delete an email template. Campaigns already created from it are not affected only if they were saved inline — confirm with the user first.",
+    inputSchema: { templateId: z.string() },
+    run: (c, a) => c.del(`/email/templates/${encodeURIComponent(a.templateId)}`),
+  },
+  {
+    name: "gambot_upload_email_media",
+    title: "Upload email image / attachment",
+    description:
+      "Host a file so it can be used in an email (max 10MB, any file type). Provide a public `url` (Gambot downloads and re-hosts it) OR `contentBase64`. " +
+      "kind='attachment' (default) → returns `attachment` { name, contentType, url } to pass in a template's / inline campaign's `attachments` (PDF, DOCX, XLSX…). " +
+      "kind='image' → returns `url` and `markdown` (![name](url)): paste the markdown into a plain-text body, or use the url in an <img src> of an HTML body.",
+    inputSchema: {
+      url: z.string().optional().describe("Public http(s) URL of the file to host."),
+      contentBase64: z.string().optional().describe("The file content, base64-encoded (alternative to url)."),
+      fileName: z.string().optional().describe("File name incl. extension (e.g. brochure.pdf)."),
+      contentType: z.string().optional().describe("MIME type; guessed from the extension when omitted."),
+      kind: z.enum(["attachment", "image"]).optional().describe("Default attachment."),
+    },
+    run: (c, a) => c.post("/email/media", a),
+  },
+  {
+    name: "gambot_send_test_email",
+    title: "Send test email",
+    description:
+      "Send ONE test email exactly as recipients will receive it (same footer, tracking and the template's attachments), with the subject prefixed '[בדיקה]'. " +
+      "Use templateId, or inline subject+body. variables = fixed values for {{variables}} ({ \"שם החברה\": \"Acme\" }); sampleName fills {{name}}. " +
+      "Variables left unfilled appear as [name] so you can spot them. Always test before sending a campaign to a large list.",
+    inputSchema: {
+      to: z.string().describe("Where to send the test."),
+      templateId: z.string().optional(),
+      subject: z.string().optional(),
+      body: z.string().optional(),
+      attachments: z
+        .array(z.object({ name: z.string(), contentType: z.string().optional(), url: z.string() }))
+        .optional()
+        .describe("Inline mode only (a template carries its own attachments)."),
+      variables: z.record(z.any()).optional(),
+      sampleName: z.string().optional(),
+      provider: z.string().optional().describe("Mailbox: 'google'/'microsoft' or a connection id."),
+    },
+    run: (c, a) => c.post("/email/test", a),
+  },
+
+  // ── Email campaigns (שיווק במייל) ───────────────────────────────────────────
   {
     name: "gambot_list_email_campaigns",
     title: "List email campaigns",
-    description: "List all email marketing campaigns for the organization.",
+    description: "List all email marketing campaigns for the organization (status, schedule, recipient counts — no heavy fields).",
     inputSchema: {},
     run: (c) => c.get("/email/campaigns"),
   },
   {
     name: "gambot_get_email_campaign",
     title: "Get email campaign",
-    description: "Get a single email campaign by id.",
+    description: "Get a single email campaign by id (content source, variable mapping, audience, Excel recipients, schedule, status).",
     inputSchema: { campaignId: z.string() },
     run: (c, a) => c.get(`/email/campaigns/${encodeURIComponent(a.campaignId)}`),
+  },
+  {
+    name: "gambot_get_email_campaign_results",
+    title: "Get email campaign results",
+    description:
+      "Results of an email campaign: stats { total, sent, opened, clicked, failed, bounced } (opened includes clicked; clicked = recipients who clicked a link) " +
+      "and one row per recipient { email, name, status (sent|opened|clicked|failed|bounced), sentAt, openedAt, openCount, clicked, clickCount, clickedUrls[], lastClickedAt, replied, errorMessage }. " +
+      "Also clicksByLink [{ url, recipients }] = how many different recipients clicked each link/button. Every link in a campaign mail is tracked automatically. " +
+      "Mail-scanner/bot clicks are excluded; 'opened' is pixel-based (Apple Mail / blocked images distort it) so prefer clicks as the stronger engagement signal. " +
+      "To find who did NOT open / did NOT click, filter the recipient rows (opened/status/clicked). Only mails sent after the tracking release carry click data.",
+    inputSchema: { campaignId: z.string() },
+    run: (c, a) => c.get(`/email/campaigns/${encodeURIComponent(a.campaignId)}/results`),
+  },
+  {
+    name: "gambot_get_email_audience_preview",
+    title: "Preview email campaign audience",
+    description:
+      "Read-only: how many people a CRM segment resolves to BEFORE creating an email campaign. Pass contactFilters (same shape as gambot_create_email_campaign) or the campaignId of a saved campaign. " +
+      "Returns { matchedContacts, withEmail, withoutEmail, unsubscribed, willReceive (= emails that would actually be sent), sample (≤10 { name, email, phoneNumber }), filters (the normalised filters), warnings }. " +
+      "An invalid filter is rejected with the exact problem. Nothing is created or sent.",
+    inputSchema: {
+      contactFilters: z.any().optional().describe(CONTACT_FILTERS_DESC),
+      campaignId: z.string().optional().describe("Preview the saved audience of an existing (Contacts) email campaign instead of passing contactFilters."),
+    },
+    run: (c, a) => c.post("/email/campaigns/audience-preview", a),
   },
   {
     name: "gambot_create_email_campaign",
     title: "Create email campaign",
     description:
-      "Create an email marketing campaign. Content: either a saved templateId, or inline subject+body. " +
-      "Audience: a CRM segment via contactFilters ({ filters:[…], logic:'AND' }) OR an explicit excelRecipients list ([{ email, name, variables }]). " +
-      "Pass run=true to create AND send immediately in one call. Sends on the same durable, resumable engine as the app (safe for large lists, no duplicates).",
+      "Create an email marketing campaign — the same engine as the app (scheduling, durable resumable send, no duplicates). " +
+      "CONTENT: a saved templateId, OR inline subject+body (plain text or HTML; markdown images allowed) with optional attachments (from gambot_upload_email_media; for template campaigns the files live on the template). " +
+      "VARIABLES: {{names}} in the content are resolved per recipient — fixed value (templateVariables: { name: 'value' } or { name: { contactField } }) → CRM contact field → the Excel row's variables → same-name match; template variableDefaults are applied automatically. " +
+      "AUDIENCE (choose one): contactFilters for a CRM segment — { logic:'AND'|'OR', filters:[ { filterType:'group', operator:'equals', groupValue:['<tag name from gambot_list_tags>'] }, " +
+      "{ filterType:'contactField', fieldName:'<field key from gambot_get_contact_fields>', operator:'equals', value:'<text>' } ] } " +
+      "(a Boolean/checkbox field takes value 'true' or 'false' — 'false' also matches contacts on which it was never set; operators: equals, notEquals, contains, notContains, startsWith, endsWith, isEmpty, isNotEmpty, greaterThan, lessThan, before, after…). " +
+      "An invalid filter is rejected with the reason, and the response's recipientCount is the number of people who will actually receive it (call gambot_get_email_audience_preview first to check the segment). " +
+      "OR excelRecipients ([{ email, name, variables:{ <variableName>: value } }]) for a list — an Excel-based campaign is saved in the exact shape the web app uses, " +
+      "so the spreadsheet (email / name / variable columns and mapping) is visible and editable in the campaign screen. Convert the user's Excel/CSV rows into excelRecipients yourself. " +
+      "SCHEDULE: runAt (ISO) + timezone, optional scheduleType 'once'|'repeated' with interval/intervalNumber/endCondition. run=true creates AND sends immediately. " +
+      "Sending to many people is a bulk action — confirm audience + content with the user first and send a test (gambot_send_test_email). Returns { campaignId, status, recipientCount, warnings }.",
     inputSchema: {
       campaignName: z.string().describe("Campaign name."),
       templateId: z.string().optional().describe("Saved email template id (omit if using inline subject+body)."),
       subject: z.string().optional().describe("Inline subject (when not using a template)."),
-      body: z.string().optional().describe("Inline HTML body (when not using a template)."),
-      contentSource: z.enum(["template", "inline", "html"]).optional().describe("Content source; inferred from templateId/subject when omitted."),
+      body: z.string().optional().describe("Inline body — plain text or HTML (when not using a template)."),
+      attachments: z
+        .array(z.object({ name: z.string(), contentType: z.string().optional(), url: z.string() }))
+        .optional()
+        .describe("Inline-content campaigns only — files attached to every email (from gambot_upload_email_media)."),
+      contentSource: z.enum(["template", "inline", "html"]).optional().describe("Inferred from templateId / body when omitted."),
       provider: z.string().optional().describe("Mailbox to send from: 'google'/'microsoft' or a connection id."),
-      recipientSource: z.enum(["Contacts", "Excel"]).optional().describe("Audience source; inferred from contactFilters/excelRecipients when omitted."),
-      contactFilters: z.any().optional().describe("CRM segment: { filters:[…], logic:'AND'|'OR' }."),
-      excelRecipients: z.array(z.any()).optional().describe("Explicit recipients: [{ email, name, variables:{…} }]."),
-      templateVariables: z.any().optional().describe("Optional template variable mapping."),
-      runAt: z.string().optional().describe("Optional ISO-8601 time to schedule the send."),
-      timezone: z.string().optional().describe("Optional IANA timezone for scheduling (e.g. 'Asia/Jerusalem')."),
+      recipientSource: z.enum(["Contacts", "Excel"]).optional().describe("Inferred from contactFilters / excelRecipients when omitted."),
+      contactFilters: z.any().optional().describe(CONTACT_FILTERS_DESC),
+      excelRecipients: z
+        .array(z.any())
+        .optional()
+        .describe("List audience: [{ email, name?, variables?:{ <variableName>: value } }]. Extra keys on a row are treated as variables."),
+      templateVariables: z
+        .any()
+        .optional()
+        .describe("Fixed/contact-field values per {{variable}}: { \"שם החברה\": \"Acme\", \"city\": { \"contactField\": \"city\" } }."),
+      runAt: z.string().optional().describe("Local wall-clock time in `timezone` to schedule the send, e.g. 2026-07-01T09:00:00 (no Z / offset; past times are rejected). Campaign becomes Scheduled."),
+      timezone: z.string().optional().describe("IANA timezone for runAt (e.g. 'Asia/Jerusalem')."),
+      scheduleType: z.enum(["once", "repeated"]).optional(),
+      interval: z.string().optional().describe("For repeated schedules, e.g. 'days' | 'weeks' | 'months'."),
+      intervalNumber: z.number().int().optional(),
+      endCondition: z.any().optional(),
       run: z.boolean().optional().describe("Create AND send now in one call (default false)."),
     },
     run: (c, a) => c.post("/email/campaigns", a),
   },
   {
+    name: "gambot_update_email_campaign",
+    title: "Update email campaign",
+    description:
+      "Update a Draft/Scheduled email campaign — send only the fields that change (same fields as gambot_create_email_campaign; excelRecipients replaces the list). " +
+      "Re-registers the schedule when runAt/timezone change. Running/Completed campaigns cannot be edited.",
+    inputSchema: {
+      campaignId: z.string(),
+      campaignName: z.string().optional(),
+      templateId: z.string().optional(),
+      subject: z.string().optional(),
+      body: z.string().optional(),
+      attachments: z.array(z.object({ name: z.string(), contentType: z.string().optional(), url: z.string() })).optional(),
+      provider: z.string().optional(),
+      contactFilters: z.any().optional().describe(CONTACT_FILTERS_DESC),
+      excelRecipients: z.array(z.any()).optional(),
+      templateVariables: z.any().optional(),
+      runAt: z.string().optional(),
+      timezone: z.string().optional(),
+      scheduleType: z.enum(["once", "repeated"]).optional(),
+      interval: z.string().optional(),
+      intervalNumber: z.number().int().optional(),
+      endCondition: z.any().optional(),
+    },
+    run: (c, a) => {
+      const { campaignId, ...rest } = a;
+      return c.patch(`/email/campaigns/${encodeURIComponent(campaignId)}`, rest);
+    },
+  },
+  {
+    name: "gambot_delete_email_campaign",
+    title: "Delete email campaign",
+    description: "Delete an email campaign and cancel its schedule. Already-sent emails are not recalled — confirm with the user first.",
+    inputSchema: { campaignId: z.string() },
+    run: (c, a) => c.del(`/email/campaigns/${encodeURIComponent(a.campaignId)}`),
+  },
+  {
     name: "gambot_run_email_campaign",
     title: "Run email campaign",
-    description: "Run (send) a saved email campaign now. Uses the durable, resumable engine — safe for large audiences, no duplicates.",
+    description:
+      "Run (send) a saved email campaign now. Uses the durable, resumable engine — safe for large audiences, no duplicates. Failures (no mailbox connected, empty audience…) are returned as errors. " +
+      "Confirm with the user before sending to a large audience.",
     inputSchema: { campaignId: z.string() },
     run: (c, a) => c.post(`/email/campaigns/${encodeURIComponent(a.campaignId)}/run`),
   },
 
-  // ── Calendar ────────────────────────────────────────────────────────────────
+  // â”€â”€ Calendar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_calendar_events",
     title: "List calendar events",
     description:
-      "List calendar events in a date range from a connected Google/Microsoft calendar (Settings → Connections). " +
-      "Pass provider ('google'/'microsoft' or a connection id; blank ⇒ first connected calendar) and an optional startDate/endDate (ISO-8601; default = current month).",
+      "List calendar events in a date range from a connected Google/Microsoft calendar (Settings â†’ Connections). " +
+      "Pass provider ('google'/'microsoft' or a connection id; blank â‡’ first connected calendar) and an optional startDate/endDate (ISO-8601; default = current month).",
     inputSchema: {
-      provider: z.string().optional().describe("Calendar to read: 'google'/'microsoft' or a connection id. Blank ⇒ first connected calendar."),
+      provider: z.string().optional().describe("Calendar to read: 'google'/'microsoft' or a connection id. Blank â‡’ first connected calendar."),
       startDate: z.string().optional().describe("Range start (ISO-8601). Default = first day of the current month."),
       endDate: z.string().optional().describe("Range end (ISO-8601). Default = start + 1 month."),
     },
     run: (c, a) => c.get("/calendar/events", { provider: a.provider, startDate: a.startDate, endDate: a.endDate }),
   },
 
-  // ── Facebook / Meta Lead Ads ────────────────────────────────────────────────
+  // â”€â”€ Facebook / Meta Lead Ads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_list_facebook_lead_connections",
     title: "List Facebook lead-ads connections",
@@ -2475,9 +3016,9 @@ export const TOOLS: GambotTool[] = [
     name: "gambot_list_facebook_lead_forms",
     title: "List Facebook lead forms",
     description:
-      "List the leadgen forms of a connected Facebook page. Pass a connectionId (from gambot_list_facebook_lead_connections; blank ⇒ the org's first Facebook Lead Ads connection). Returns [{ id, name, status }].",
+      "List the leadgen forms of a connected Facebook page. Pass a connectionId (from gambot_list_facebook_lead_connections; blank â‡’ the org's first Facebook Lead Ads connection). Returns [{ id, name, status }].",
     inputSchema: {
-      connectionId: z.string().optional().describe("Facebook Lead Ads connection id. Blank ⇒ the org's first one."),
+      connectionId: z.string().optional().describe("Facebook Lead Ads connection id. Blank â‡’ the org's first one."),
     },
     run: (c, a) => c.get("/leadforms", { connectionId: a.connectionId }),
   },
@@ -2486,12 +3027,12 @@ export const TOOLS: GambotTool[] = [
     title: "Create Facebook lead auto-reply bot",
     description:
       "Create a bot that auto-replies the moment a new lead arrives from a Facebook/Meta lead form. Provide a connectionId (from gambot_list_facebook_lead_connections) and a reply (replyTemplateName or replyText). " +
-      "Optionally restrict to specific formIds (from gambot_list_facebook_lead_forms; blank ⇒ any form on the page). The reply is sent to the lead's WhatsApp; lead fields are available as placeholders like {{Step_1_facebook_lead_data_full_name}}.",
+      "Optionally restrict to specific formIds (from gambot_list_facebook_lead_forms; blank â‡’ any form on the page). The reply is sent to the lead's WhatsApp; lead fields are available as placeholders like {{Step_1_facebook_lead_data_full_name}}.",
     inputSchema: {
       name: z.string().describe("Bot name."),
       connectionId: z.string().describe("Facebook Lead Ads connection id (see gambot_list_facebook_lead_connections)."),
       pageId: z.string().optional().describe("Facebook page id (defaults from the connection)."),
-      formIds: z.array(z.string()).optional().describe("Specific lead form ids to react to; blank ⇒ any form on the page."),
+      formIds: z.array(z.string()).optional().describe("Specific lead form ids to react to; blank â‡’ any form on the page."),
       replyTemplateName: z.string().optional().describe("Approved WhatsApp template to send as the reply."),
       replyText: z.string().optional().describe("Free-text reply (used when no template is given)."),
       status: z.enum(["active", "inactive"]).optional().describe("Bot status (default active)."),
@@ -2505,18 +3046,70 @@ export const TOOLS: GambotTool[] = [
         replyTemplateName: a.replyTemplateName,
         replyText: a.replyText,
         status: a.status,
+        allowDuplicate: a.allowDuplicate,
       }),
   },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// BOT-CREATION SAFETY NET
+// Every tool that CREATES a bot/botomation (a) always starts from the org's EXISTING state â€” the current
+// bots are fetched first and returned as `existingBotsBefore` â€” and (b) accepts `allowDuplicate`. The
+// backend independently rejects duplicates (409 DUPLICATE_BOT: same name, or an active bot with the same
+// trigger), so an agent that ignores the state still cannot create the same bot twice.
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const BOT_CREATE_TOOLS = new Set([
+  "gambot_create_keyword_autoreply",
+  "gambot_create_template_button_autoreply",
+  "gambot_create_menu_bot",
+  "gambot_deploy_bot_package",
+  "gambot_create_bot",
+  "gambot_create_facebook_lead_bot",
+]);
+for (const t of TOOLS) {
+  if (!BOT_CREATE_TOOLS.has(t.name)) continue;
+  t.inputSchema = {
+    ...t.inputSchema,
+    allowDuplicate: z
+      .boolean()
+      .optional()
+      .describe(
+        "DEFAULT false. The server rejects a bot whose name already exists or whose trigger (same keywords / template button) is already used by an ACTIVE bot (DUPLICATE_BOT). Set true ONLY when the user explicitly asked for another copy."
+      ),
+  };
+  t.description +=
+    " â”€â”€ BEFORE CREATING: look at the existing bots (this tool also returns `existingBotsBefore`); if a matching bot exists, update/enable it instead (gambot_update_bot / gambot_set_bot_status). Duplicates (same name, or same active trigger) are rejected with DUPLICATE_BOT.";
+  const original = t.run;
+  t.run = async (c, a) => {
+    let existing: Array<Record<string, unknown>> | undefined;
+    try {
+      const res: any = await c.get("/bots");
+      const items: any[] = res?.data?.items ?? res?.items ?? [];
+      existing = items.slice(0, 100).map((b) => ({
+        id: b.id,
+        name: b.name,
+        status: b.status,
+        role: b.role,
+        triggerKind: b.triggerKind,
+        sourceFlowId: b.sourceFlowId,
+      }));
+      if (items.length > 100) existing.push({ note: `${items.length - 100} more bots not shown â€” call gambot_list_bots for all.` });
+    } catch {
+      /* the state snapshot is best-effort; the server-side duplicate guard still applies */
+    }
+    const result: any = await original(c, a);
+    return existing && result && typeof result === "object" ? { ...result, existingBotsBefore: existing } : result;
+  };
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PUBLIC / TOKEN-LESS ONBOARDING SURFACE
-// The set of tools exposed when the MCP server starts WITHOUT a GAMBOT_TOKEN — the "create an account
+// The set of tools exposed when the MCP server starts WITHOUT a GAMBOT_TOKEN â€” the "create an account
 // from Claude with no key yet" flow. Every tool here maps to a backend endpoint marked [AllowAnonymous]
 // (create-trial-self-serve, check-organization, organization-name, payment-link, waba/connect-link,
 // status). Account creation goes through the self-serve endpoint (no key, number-purchase blocked).
 // Once WhatsApp is connected the user gets their gmbt_ token in-app and can run the full tool set.
-// ─────────────────────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const _byName: Record<string, GambotTool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
@@ -2527,16 +3120,16 @@ export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
   _byName["gambot_send_onboarding_verification"],
   _byName["gambot_verify_onboarding_code"],
   {
-    // Self-serve variant: hits the PUBLIC endpoint (no token). Free number paths need no verification;
+    // Self-serve variant: hits the PUBLIC endpoint (no token). Co-existence / BYO paths need no verification;
     // BUYING a number (simInfo.purchaseInTwilio) additionally requires a verified verificationId.
     ..._byName["gambot_create_trial_account"],
     description:
       "Create a new FREE-TRIAL organization + first user with NO Gambot API key (public self-serve). " +
       "If companyInfo.organizationName is omitted it's generated from companyInfo.companyName + companyInfo.companyIdNumber, so one call suffices. " +
-      "WhatsApp/number options: useFreeNumber (Meta test number) · useCoexisting (existing WhatsApp Business number in simInfo.simNumberEntered) · BYO SIM (the customer's own number in simInfo.simNumberEntered) · " +
-      "BUY A NUMBER from us (simInfo.purchaseInTwilio=true + simInfo.selectedSimNumber from gambot_search_available_numbers) — this LAST option requires a VERIFIED verificationId: first run gambot_send_onboarding_verification then gambot_verify_onboarding_code, and pass that verificationId here. The free options need no verification. " +
+      "WhatsApp/number options: (Gambot does NOT provide any free / test / sandbox numbers - never offer or suggest one) Â· useCoexisting (existing WhatsApp Business number in simInfo.simNumberEntered) Â· BYO SIM (the customer's own number in simInfo.simNumberEntered). " +
+      "BUYING a number/SIM from Gambot is NOT possible on a trial (it is prepaid, no trial) and is rejected with sim_requires_paid - use gambot_create_paid_account_self_serve instead. " +
       "GLOBAL: send companyInfo.timezone (IANA) and companyInfo.country (ISO-3166 alpha-2). " +
-      "Returns wabaConnectUrl (browser page for Meta Embedded Signup — it cannot run in the agent), paymentUrl (hosted card page) and statusUrl. " +
+      "Returns wabaConnectUrl (browser page for Meta Embedded Signup â€” it cannot run in the agent), paymentUrl (hosted card page) and statusUrl. " +
       "After creating, tell the customer to open wabaConnectUrl to connect WhatsApp, then poll gambot_get_onboarding_status.",
     inputSchema: {
       ..._byName["gambot_create_trial_account"].inputSchema,
@@ -2547,7 +3140,7 @@ export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
       attribution: z
         .record(z.string())
         .optional()
-        .describe("OPTIONAL, for Gambot's own analytics: how the user found Gambot, e.g. { source: \"claude\"|\"chatgpt\"|\"cursor\"|\"gemini\"|\"other\", referrer, landing_page, utm_source }. Pass ONLY what the user actually told you or what is known from the environment — never invent values; omit if unknown."),
+        .describe("OPTIONAL, for Gambot's own analytics: how the user found Gambot, e.g. { source: \"claude\"|\"chatgpt\"|\"cursor\"|\"gemini\"|\"other\", referrer, landing_page, utm_source }. Pass ONLY what the user actually told you or what is known from the environment â€” never invent values; omit if unknown."),
     },
     run: (c, a) => {
       // Attribution: keep whatever the agent/user supplied, and add the MCP host (known from the MCP
@@ -2555,6 +3148,35 @@ export const PUBLIC_ONBOARDING_TOOLS: GambotTool[] = [
       const attribution: Record<string, string> = { channel: "mcp", ...(a.attribution || {}) };
       if (c.caller && !attribution.mcp_client) attribution.mcp_client = c.caller;
       return c.post("/onboarding/create-trial-self-serve", { ...a, attribution });
+    },
+  },
+  {
+    // Self-serve PREPAID variant (public endpoint, no token): the ONLY token-less way to buy a number/SIM from Gambot.
+    ..._byName["gambot_create_paid_account"],
+    name: "gambot_create_paid_account_self_serve",
+    title: "Create prepaid account with a Gambot number (no API key, card required)",
+    description:
+      "Create a new PREPAID organization with NO Gambot API key (public self-serve) - the way to BUY A NUMBER/SIM from Gambot. There is NO trial: " +
+      "the card is verified, the number (simInfo.purchaseInTwilio=true + simInfo.selectedSimNumber from gambot_search_available_numbers) is bought, and the FIRST period (plan + SIM) is charged immediately. " +
+      "If the charge fails nothing is created and the number is released. Buying a number requires a VERIFIED verificationId: first run gambot_send_onboarding_verification then gambot_verify_onboarding_code and pass it here. " +
+      "Prices are fixed by Gambot (the plan/payEach/currency you send only select the tier); never promise a trial or a free SIM. " +
+      "companyInfo.companyName + companyInfo.companyIdNumber (ח.פ/ת.ז) are required; send companyInfo.timezone and companyInfo.country. " +
+      "Returns wabaConnectUrl (open in a browser to connect WhatsApp) and statusUrl - then poll gambot_get_onboarding_status.",
+    inputSchema: {
+      ..._byName["gambot_create_paid_account"].inputSchema,
+      verificationId: z
+        .string()
+        .optional()
+        .describe("REQUIRED when buying a number (simInfo.purchaseInTwilio=true): a verificationId that passed gambot_verify_onboarding_code."),
+      attribution: z
+        .record(z.string())
+        .optional()
+        .describe("OPTIONAL analytics: how the user found Gambot, e.g. { source, referrer, landing_page, utm_source }. Only what is actually known - never invent."),
+    },
+    run: (c, a) => {
+      const attribution: Record<string, string> = { channel: "mcp", ...(a.attribution || {}) };
+      if (c.caller && !attribution.mcp_client) attribution.mcp_client = c.caller;
+      return c.post("/onboarding/create-paid-self-serve", { ...a, attribution });
     },
   },
   _byName["gambot_create_payment_link"],

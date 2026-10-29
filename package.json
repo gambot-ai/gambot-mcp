@@ -1,6 +1,6 @@
 {
   "name": "gambot-mcp",
-  "version": "1.8.0",
+  "version": "1.9.1",
   "description": "Official WhatsApp Business API MCP server for AI agents. Send messages and templates, receive webhooks, and manage contacts, CRM and bots through the official WhatsApp Cloud API (Meta Business Solution Provider) - no WhatsApp Web, no QR sessions.",
   "mcpName": "io.github.gambot-ai/gambot-mcp",
   "type": "module",

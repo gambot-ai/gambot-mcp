@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "Gambot - Official WhatsApp Business API",
-  "version": "1.8.0",
+  "version": "1.9.1",
   "description": "Official WhatsApp Business API for AI agents: send messages and templates, receive webhooks, manage contacts, CRM and bots. Not WhatsApp Web automation. Works with Claude, Cursor, Codex, Gemini and any MCP client.",
   "author": {
     "name": "Gambot",

@@ -13,7 +13,7 @@ Two layers exist. Do not confuse them:
 
 ## OAuth (hosted MCP)
 
-Hosted endpoint: `https://gambot-mcp.azurewebsites.net/mcp` (Streamable HTTP).
+Hosted endpoint: `https://mcp.gambot.co.il/mcp` (Streamable HTTP).
 
 - Standards-based OAuth 2.0 with PKCE and dynamic client registration. Clients that support remote MCP OAuth (Claude web/desktop connectors, ChatGPT connectors, Cursor remote, VS Code) discover everything from the 401 `WWW-Authenticate` header and `/.well-known/oauth-protected-resource/mcp`.
 - The user signs in on a consent page served by the hosted MCP. If they have no account yet, that page links to account creation.
@@ -41,7 +41,7 @@ Hosted endpoint: `https://gambot-mcp.azurewebsites.net/mcp` (Streamable HTTP).
 
 ## No token yet?
 
-That is normal for a new customer: the token is a *result* of onboarding. Start the local MCP without a token (`npx -y gambot-mcp`) or the hosted onboarding endpoint `https://gambot-mcp.azurewebsites.net/mcp/onboarding`; both expose only the public account-creation tools. Then follow [onboarding.md](onboarding.md).
+That is normal for a new customer: the token is a *result* of onboarding. Start the local MCP without a token (`npx -y gambot-mcp`) or the hosted onboarding endpoint `https://mcp.gambot.co.il/mcp/onboarding`; both expose only the public account-creation tools. Then follow [onboarding.md](onboarding.md).
 
 ## Token handoff limitation
 

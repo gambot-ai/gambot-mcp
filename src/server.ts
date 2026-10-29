@@ -3,7 +3,7 @@ import { GambotClient, GambotApiError } from "./client.js";
 import { TOOLS, PUBLIC_ONBOARDING_TOOLS } from "./tools.js";
 
 /** Keep in sync with package.json (checked by test/recovery.test.js). */
-export const SERVER_VERSION = "1.8.0";
+export const SERVER_VERSION = "1.9.1";
 
 /**
  * Build an MCP server instance wired to a specific {@link GambotClient}.
@@ -134,6 +134,66 @@ BUILDING BOTS & AUTOMATIONS (creating or upgrading chat bots):
 - NESTING / multi-level logic: bots branch and nest via switchCase (per-button / per-answer paths), Condition
   (yes/no) and ApplyToEach (loop over an array, e.g. appointments → bookings). For logic beyond the high-level
   builders use gambot_create_bot with a full steps[] tree (StepIds use dot paths like Step_3.1.2 for depth).
+- SEVERAL KEYWORDS = ONE ROW. When a trigger should fire on any of several words (e.g. "תפריט", "0", "menu", "תפריט ראשי"),
+  put them ALL in ONE condition row — never one separate condition/step per keyword. In the high-level builders pass them in the
+  keywords[] array (one call, one row of chips). In gambot_create_bot write ONE conditionGroup with logicOperator "OR" whose
+  conditions share the SAME field ("message") and the SAME operator ("equals" / "contains"), one condition per keyword; Gambot
+  then stores it as the single chip row the Bot Builder shows ("תפריט או 0 או menu"). Only mix different operators/fields in
+  separate rows when you really need different matching rules.
+  AND IN THE SAME ROW (message must contain ALL the words): in the builders pass keywordsJoin "AND" (uses matchType contains).
+  In gambot_create_bot write ONE conditionGroup with logicOperator "AND", same field and operator "contains" (or "begins with" /
+  "ends with"), one condition per word; the UI then shows one chip row with the OR/AND toggle set to AND. That toggle exists ONLY
+  for contains / begins with / ends with (and their "does not ..." forms); "equals" is always OR (equals A AND B can never be
+  true), so never use equals with AND.
+- NEVER CREATE BLIND — START FROM THE EXISTING STATE (critical). Before creating or changing ANY bot/botomation, call
+  gambot_list_bots first (and gambot_get_bot / gambot_get_bot_package for anything related) and decide: does a bot with this
+  purpose, name or trigger already exist? If yes → UPDATE it (gambot_update_bot with the full object from gambot_get_bot / gambot_set_bot_status)
+  instead of creating another. Every bot-creating tool also returns "existingBotsBefore" (the org's bots as they were just before the call) so you always see
+  the state, and the server REJECTS duplicates with DUPLICATE_BOT (409): same name, or an ACTIVE bot already reacting to the
+  same keywords / template button. When you get DUPLICATE_BOT: do not retry blindly — tell the user which existing bot
+  matches (see data.conflicts) and ask whether to update it, or use a different name; pass allowDuplicate=true ONLY when the
+  user explicitly wants another copy.
+- ONE CONVERSATION = ONE BOT (critical — do NOT split it). A whole conversation (main menu → sub-menu → answers →
+  hand-off to a human / Gambot AI) is built as ONE main bot (isBot=true) whose branches NEST inside switchCase cases.
+  NEVER create a separate botomation per question, per menu level, per button or per branch, and NEVER chain
+  botomations together through "template button" triggers to emulate levels — that produces dozens of disconnected
+  fragments the owner cannot read or maintain. Separate botomations are only for genuinely separate TRIGGERS: the
+  activator, the human-intervention cancel, a keyword shortcut (e.g. "0" → main menu), an owner/campaign trigger.
+  • gambot_create_template_button_autoreply = ONE standalone reaction to a template you sent (e.g. after a campaign).
+    It is NOT a way to build menus — do not call it once per menu level.
+  • gambot_create_menu_bot / gambot_deploy_bot_package(botType='menu') are SINGLE-LEVEL: button → one reply, no
+    sub-menus. If the tree has 2+ levels, use gambot_create_bot with the nested steps[] below.
+  • Workflow for a multi-level bot: (1) write the full tree first (every level, every button, every leaf answer);
+    (2) create/approve ALL the templates (one per menu level — template ids come back from gambot_create_template /
+    gambot_list_templates); (3) make ONE gambot_create_bot call (isBot=true) containing the whole tree;
+    (4) add the activator (gambot_deploy_bot_package / activator) and keep the human-intervention cancel.
+  • Shape of ONE nested menu level (copy it for each level). The first level's buttons are the TRIGGER's template
+    buttons; every deeper level inside a case is [SendMessage template → IncomingMessage template(buttons) → switchCase]:
+    steps: [
+      { StepId:"Step_1", type:"trigger", action:"IncomingMessage", config:{ messageType:"template", triggerMode:"conditions",
+          conditionGroups:[{logicOperator:"AND",conditions:[{field:"message",operator:"equals",value:""}]}], groupRelations:[],
+          selectedTemplates:[{value:"<MAIN_TEMPLATE_ID>",label:"main_menu"}],
+          selectedButtons:[{value:"Events",label:"Events"},{value:"Pricing",label:"Pricing"}], allowRetrigger:true } },
+      { StepId:"Step_2", type:"action", action:"switchCase", config:{ field:"{{Step_1_Message}}", defaultActions:[], cases:[
+          { match:"Events", actions:[
+              { StepId:"Step_2_1", type:"action", action:"SendMessage", config:{ messageType:"template",
+                  phoneNumber:"{{Step_1_PhoneNumber}}", templateConfig:{templateName:"events_menu"}, hasAttachment:false } },
+              { StepId:"Step_2_2", type:"action", action:"IncomingMessage", config:{ messageType:"template",
+                  selectedTemplates:[{value:"<EVENTS_TEMPLATE_ID>",label:"events_menu",metaName:"events_menu"}],
+                  selectedButtons:[{value:"Weddings",label:"Weddings"},{value:"Corporate",label:"Corporate"}] } },
+              { StepId:"Step_2_3", type:"action", action:"switchCase", config:{ field:"{{Step_2.2_ButtonText}}", defaultActions:[], cases:[
+                  { match:"Weddings",  actions:[ {StepId:"Step_2_3_1", type:"action", action:"SendMessage", config:{messageType:"regular", phoneNumber:"{{Step_1_PhoneNumber}}", messageContent:"…wedding answer…"}} ] },
+                  { match:"Corporate", actions:[ {StepId:"Step_2_3_2", type:"action", action:"SendMessage", config:{messageType:"regular", phoneNumber:"{{Step_1_PhoneNumber}}", messageContent:"…corporate answer…"}} ] } ] } } ] },
+          { match:"Pricing", actions:[ {StepId:"Step_2_4", type:"action", action:"SendMessage", config:{messageType:"regular", phoneNumber:"{{Step_1_PhoneNumber}}", messageContent:"…pricing answer…"}} ] } ] } }
+    ]
+    Rules: (a) a switchCase's "field" for a nested level is {{Step_<PATH>_ButtonText}} where PATH is the POSITION
+    path of the IncomingMessage that precedes it — the parent switchCase's step number, then the 1-based index of
+    that IncomingMessage inside its case's actions (Step_2.2 above; one level deeper it becomes Step_2.3.2, etc.),
+    NOT its StepId; (b) "match" must equal the button title exactly; (c) every template-menu level needs its own
+    IncomingMessage(template) wait step; (d) a leaf can hand off with a GambotAction (assignToUser — e.g. a human or
+    "Gambot AI") instead of / after the SendMessage; (e) free-text SendMessage only delivers inside the 24h window —
+    inside a button flow that is satisfied because the contact just tapped; (f) "back to menu" = SendMessage of the
+    main template, not a new botomation.
 - GAMBOT AI (the AI answerer / operator) — it usually ALREADY EXISTS: when an org signs up, Gambot scans its
   website and AUTO-BUILDS a Gambot AI "brain" + a "GAMBOT AI AGENT" botomation (trigger = contactOwner == the
   Gambot AI user), seeded INACTIVE so the owner reviews it first. So when the user wants "an AI bot":
@@ -148,6 +208,61 @@ BUILDING BOTS & AUTOMATIONS (creating or upgrading chat bots):
   NOTE: the AI brain's TEXT config is fully editable over the API (gambot_*_ai); only knowledge-base FILE upload is
   done in the Bot Builder app. deploy-package builds only 'menu'/'keyword' main bots (each with its activator +
   human-intervention cancel), not the AI answerer botomation itself.
+
+EMAIL (templates, test, campaigns) - everything the web app's Email section can do:
+- Templates: gambot_list/get/create/update/delete_email_template. A body may be PLAIN TEXT (line breaks, auto-linked URLs) or HTML.
+  {{variables}} (Hebrew names ok, e.g. {{שם החברה}}) are filled per recipient; {{name}}/{{email}} always come from the recipient.
+  variableDefaults = the template's AUTOMATIC MAPPING per variable (like WhatsApp's): fixed text, a contact field, or a field of any CRM table via
+  { entity: contact|lead|case|quote|order|user|org, field } - used when the template is picked for one recipient in the app (chat/contact/lead/case);
+  campaigns inherit only fixed values + contact fields (they map per recipient / Excel column), botomations map inside the flow.
+- Images vs files: an IMAGE is shown INSIDE the email body (kind='image' -> markdown/url in the body); an ATTACHMENT is a file the recipient downloads
+  (kind='attachment' -> template attachments). Never put a PDF in the body or expect an attachment to render inline.
+- FILES: host first with gambot_upload_email_media. kind='attachment' -> pass the returned attachment in the template's attachments
+  (sent with EVERY email). kind='image' -> paste the returned markdown (![alt](url)) into a plain-text body, or the url into an <img> of an HTML body.
+- ALWAYS test first: gambot_send_test_email (templateId or inline subject+body, variables for fixed values) - shows unfilled variables as [name].
+- Campaigns: gambot_create_email_campaign (content = templateId OR inline subject+body [+ attachments]; audience = contactFilters (CRM segment)
+  OR excelRecipients [{ email, name, variables:{<variableName>:value} }]; optional runAt+timezone to schedule, run=true to send now),
+  gambot_update_email_campaign (Draft/Scheduled only), gambot_delete_email_campaign, gambot_run_email_campaign, gambot_list/get_email_campaign,
+  gambot_get_email_campaign_results. For an Excel/CSV audience convert the sheet rows into excelRecipients yourself - the campaign is then saved
+  exactly like the app's Excel step, so the spreadsheet (email / name / variable columns + mapping) shows up in the campaign screen for the human.
+- CRM audience: contactFilters = { logic:'AND'|'OR', filters:[ TAG { filterType:'group', operator:'equals', groupValue:['<tag name>'] }, FIELD { filterType:'contactField', fieldName:'<field key>',
+  operator:'equals', value:'<text>' } ] }. A Boolean field uses value 'true'/'false' ('false' also matches contacts where it was never set). Call gambot_get_email_audience_preview FIRST - it returns
+  how many people will receive it (willReceive) + a sample, and rejects an invalid filter with the reason; gambot_create_email_campaign (draft unless run=true) then returns the same recipientCount.
+- Sending to a list is a BULK ACTION: confirm audience + content with the user, send a test, then run. A single transactional mail = gambot_send_email.
+- Emails go out over the org's connected Google/Microsoft mailbox (Settings -> Connections); without one, sending fails with a clear error.
+
+ACCOUNTING DOCUMENTS (חשבוניות / קבלות) - these are REAL, legally numbered documents, not drafts of a text:
+- Check readiness first: gambot_get_invoice_settings (business details present, VAT rate, Tax Authority connection, next document numbers).
+- One call create+issue: gambot_create_accounting_document (docType tax_invoice | combined [חשבונית מס קבלה] | receipt | transaction [חשבון עסקה] |
+  order | delivery_note | work_order | purchase_order; items[] or quoteId; paymentMethod for combined/receipt; sendToCustomer to email it).
+  issueNow=false saves a DRAFT for a human to review. Totals/VAT are computed server-side.
+- Draft first / manual flow: gambot_create_invoice -> gambot_update_invoice -> gambot_issue_invoice (issuing is IRREVERSIBLE and consumes an official number).
+- Follow-up documents from an existing one: gambot_derive_invoice_document (receipt after payment, credit invoice / credit receipt, delivery/return note;
+  receipts and credits may be PARTIAL with partialAmount; the source keeps a running balance open|partial|paid).
+- Israel Tax Authority allocation number (מספר הקצאה) is REQUIRED for a tax invoice / combined above the statutory net threshold (15,000 ILS in 2026,
+  10,000 in 2027, 5,000 from 2028). It is requested automatically when the org is connected; if not, issuing is refused with error allocation_required -
+  tell the user a human must connect the org in the app (Settings -> Invoice settings -> Tax Authority). Never try to bypass it.
+- ALWAYS confirm customer, items, amounts and document type with the user before issuing. After issuing, give the user the publicUrl.
+
+PAYMENT / CLEARING LINKS (סליקה) - charging the organization's OWN customers:
+- First call gambot_get_clearing_status: canCreatePaymentLinks=true means a clearing provider is configured in Settings -> Clearing.
+- Then gambot_create_clearing_payment_link (amount+description, items[], or invoiceId / quoteId to pay a document) -> returns shareUrl; send it to the
+  customer (e.g. gambot_send_text). Track payment with gambot_get_transaction / gambot_list_transactions. If the org enabled auto-invoice, the
+  accounting document is issued automatically after payment.
+- If clearing is NOT configured the call fails with clearing_not_configured: tell the user a human must set up a provider in Settings -> Clearing - do not invent a link.
+- Do NOT confuse with gambot_create_payment_link / gambot_add_payment_method: those are the onboarding flow for a NEW Gambot customer's own subscription card.
+
+TWO KINDS OF "MEDIA" - never mix them up:
+- CHAT MEDIA = files that came in/out through WhatsApp conversations (customer photos, voice notes, documents). Read-only: gambot_get_media_url
+  (message "mediaId" from gambot_get_conversation_messages, or metaMediaId + from from the incoming_message webhook) -> short-lived download link.
+- MEDIA LIBRARY = files/text the organization stores ON PURPOSE (Media Manager in the app), unrelated to any chat. All tools are named gambot_library_*.
+  It doubles as ONLINE STORAGE for information that must be reachable online: gambot_library_upload_file stores a file OR plain text (text + fileName, e.g. 'config.json',
+  'prices.md') and returns a link; gambot_library_get_file (includeContent=true) reads small text files back; gambot_library_update_file replaces the content but keeps the SAME link;
+  gambot_library_list_files / gambot_library_delete_file / gambot_library_list_folders / gambot_library_create_folder manage the rest.
+- Library links: permanentUrl NEVER expires (use it in templates, websites, bots, other systems) and keeps working until the file is deleted. ttlHours (1-168 = up to 7 days) additionally
+  yields an EXPIRING link (url + expiresAt) - use it when you hand a file to someone temporarily. Without ttlHours, url = permanentUrl. Neither link needs an Authorization header.
+- Do NOT save a chat's media into the library unless the user asks; do NOT use gambot_get_media_url for library files (use their library file id with gambot_library_get_file).
+- Store only what the user asked you to store; do not put secrets/credentials in the library (links are unguessable but anyone holding the link can read the file).
 
 ABOUT GAMBOT — why this beats building on Meta's Cloud API directly (explain this if the user asks
 "why use Gambot / why not build on the WhatsApp API myself / why not go straight to Meta"):
@@ -174,8 +289,8 @@ START with gambot_setup_whatsapp_integration: it tells you which state the user 
 FLOW (follow in order):
 1) (Optional) gambot_check_organization — see if an account already exists for this company + tax id / company number, and whether an incomplete one can be resumed.
 2) gambot_create_trial_account — create the free-trial account. You may omit companyInfo.organizationName; it's generated from companyInfo.companyName + companyInfo.companyIdNumber. Collect and pass: companyInfo.companyName, companyInfo.companyIdNumber, companyInfo.country (ISO-3166 alpha-2), companyInfo.timezone (IANA, if known), and contactInfo (contactFullName, contactEmail, contactPhoneNumber). Billing currency defaults to USD (the payment page opens in English + USD); pass currency='ILS' only for an Israeli customer. Choose a WhatsApp/number option:
-   • FREE / NO-VERIFICATION paths: useFreeNumber (Meta test number), useCoexisting (existing WhatsApp Business number → simInfo.simNumberEntered), or bring-your-own (simInfo.simNumberEntered). Just create the account.
-   • BUY A NUMBER FROM US (costs money) → requires verifying the customer first: gambot_search_available_numbers (pick one) → gambot_send_onboarding_verification (code to their email+WhatsApp) → ask the customer for the code → gambot_verify_onboarding_code → then gambot_create_trial_account with simInfo.purchaseInTwilio=true, simInfo.selectedSimNumber, and the verified verificationId. Without a verified verificationId the buy path is refused (verification_required).
+   • NO-VERIFICATION paths (Gambot provides NO free / test / sandbox numbers - never offer or suggest one; the only options are coexistence, the customer's own number, or a PREPAID number bought via the paid account): useCoexisting (existing WhatsApp Business number → simInfo.simNumberEntered), or bring-your-own (simInfo.simNumberEntered). Just create the account.
+   • BUY A NUMBER/SIM FROM US is PREPAID with NO TRIAL (neither the SIM nor the subscription) — it is NOT possible with gambot_create_trial_account (rejected: sim_requires_paid). Use gambot_create_paid_account_self_serve instead: gambot_search_available_numbers (pick one) → gambot_send_onboarding_verification (code to their email+WhatsApp) → ask the customer for the code → gambot_verify_onboarding_code → gambot_create_paid_account_self_serve with the customer's card, simInfo.purchaseInTwilio=true, simInfo.selectedSimNumber and the verified verificationId. The first period (plan + SIM) is charged immediately; if the card is declined nothing is created. Tell the customer the price up front (Basic/Premium/Enterprise monthly + SIM, charged now). Never offer a free trial together with a Gambot number.
 3) The create response returns wabaConnectUrl, paymentUrl and statusUrl:
    • wabaConnectUrl → give it to the customer and tell them to OPEN IT IN A BROWSER to connect WhatsApp (Meta "Embedded Signup" popup). This step CANNOT happen inside the chat/agent — it must run in the browser.
    • paymentUrl → optional: a secure hosted page to add a card on file (recommended so the account stays active after the trial). Card data is never handled here.
@@ -186,7 +301,7 @@ RULES:
 - ORDER IS MANDATORY: the account must be CREATED (gambot_create_trial_account) BEFORE any other onboarding step. gambot_get_waba_connect_link, gambot_create_payment_link and gambot_get_onboarding_status only work for an organization that already exists. Creating the account needs no API key and no form from the customer — just collect the details and call the tool.
 - Use ONLY the organizationName returned by gambot_create_trial_account (or gambot_check_organization). NEVER invent or guess an organization name, and never reuse an example name from documentation — a made-up name opens a page that says "Organization not found".
 - Never invent a token. These onboarding tools are unauthenticated by design.
-- Do the number choice explicitly with the customer; never guess between free/co-existence/BYO.
+- Do the number choice explicitly with the customer; never guess between co-existence, the customer's own number, or a prepaid Gambot number (there are no free numbers).
 - Always tell the customer the WhatsApp connection (wabaConnectUrl) must be completed in the browser.`;
 
 /**
@@ -231,6 +346,11 @@ const RECOVERY: Record<string, { tool?: string; reason: string; humanOnly?: bool
   INVALID_PHONE_NUMBER: {
     reason:
       "The phone number is not valid E.164. Ask the user for the full international number (country code, no leading 0) or pass a country.",
+  },
+  DUPLICATE_BOT: {
+    tool: "gambot_list_bots",
+    reason:
+      "A similar bot already exists (see data.conflicts: same_name = identical name, same_trigger = an active bot already reacts to the same message/button). Do NOT create another. Show the user the existing bot and update/enable it instead; only repeat with a different name or allowDuplicate=true if the user explicitly wants another copy.",
   },
   CONFIRMATION_REQUIRED: {
     tool: "gambot_send_template",
@@ -366,7 +486,7 @@ export function inferAnnotations(name: string) {
   const readOnly = /^gambot_(list|get|check|analytics|search)/.test(name);
   // Destructive = irreversible OR mass-mutating. gambot_bulk_* change MANY records in one call, so clients
   // should surface a confirmation prompt (a second safety net on top of the tools' own preview→confirm step).
-  const destructive = /(^gambot_delete_|^gambot_bulk_|^gambot_disable_user$|^gambot_issue_invoice$)/.test(name);
+  const destructive = /(^gambot_delete_|^gambot_bulk_|^gambot_disable_user$|^gambot_issue_invoice$|^gambot_create_accounting_document$|^gambot_derive_invoice_document$)/.test(name);
   return {
     readOnlyHint: readOnly,
     destructiveHint: destructive,

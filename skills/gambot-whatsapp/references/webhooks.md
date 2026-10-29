@@ -37,6 +37,36 @@ Headers: `Authorization` (your configured value), `X-Gambot-Organization`, `X-Ga
 
 Inside `meta_obj` is the standard Meta WhatsApp payload (`entry[].changes[].value`): inbound messages are in `value.messages[]` (with `from`, `id`, `type`, `text.body`), delivery updates in `value.statuses[]` (with `id`, `status`, `recipient_id`). Inspect a real event from `POST /webhooks/test` or your logs before relying on a field.
 
+## Media (images, video, audio, documents, stickers)
+
+Media storage is **private** and Meta's own media URL needs a Meta token, so you cannot download a file from the raw `meta_obj`. For every inbound media message the envelope carries a normalized `media` array:
+```json
+"media": [{
+  "messageId": "wamid.…",
+  "from": "972501234567",
+  "type": "image",
+  "mimeType": "image/jpeg",
+  "fileName": null,
+  "caption": "optional caption",
+  "metaMediaId": "1234567890",
+  "downloadUrl": "https://gambot.azurewebsites.net/api/v1/media/meta/1234567890?from=972501234567"
+}]
+```
+Download the file with a `GET` to `downloadUrl` using **the same Gambot API token** (scope `conversations:read`): `Authorization: Bearer gmbt_…` or `X-Api-Key`.
+
+| `format` | Result |
+|---|---|
+| `redirect` (default) | `302` to a signed link valid 15 minutes |
+| `json` | `{ "data": { "mediaId", "url", "expiresAt" } }` — then download `url` **without** an `Authorization` header |
+| `stream` | the file bytes (with `Content-Type` and file name) |
+
+- Use `?format=stream` (or `json`) if your HTTP client forwards the `Authorization` header across redirects — the signed storage link rejects it.
+- Works even if the webhook arrives before the file is stored: Gambot fetches it from WhatsApp on demand. WhatsApp keeps media ~30 days; after that, if Gambot has no copy, you get `404`.
+- `ttlMinutes` (1–1440, default 15) sets how long the signed link lives.
+- You can only fetch media of your own organization.
+- MCP: `gambot_get_media_url` (`metaMediaId` + `from`, or `mediaId`).
+- Messages read from `GET /conversations/{phone}/messages` carry `mediaId` and a `mediaUrl` that is the same kind of authenticated link (`GET /api/v1/media/{mediaId}`), never a raw storage URL.
+
 ## Handler rules
 
 1. **Verify** the `Authorization` header with a constant-time comparison. Reject with 401 otherwise.

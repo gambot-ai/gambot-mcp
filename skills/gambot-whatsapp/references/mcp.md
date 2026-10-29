@@ -4,10 +4,10 @@ Two ways to connect. Both expose the same tools; pick by client capability.
 
 | | Local (stdio) | Hosted (Streamable HTTP) |
 |---|---|---|
-| Command / URL | `npx -y gambot-mcp` | `https://gambot-mcp.azurewebsites.net/mcp` |
+| Command / URL | `npx -y gambot-mcp` | `https://mcp.gambot.co.il/mcp` |
 | Auth | `GAMBOT_TOKEN` env var (optional: token-less onboarding mode) | OAuth 2.0 (PKCE) or `Authorization: Bearer gmbt_…` |
 | Needs Node | Yes (18+) | No |
-| Account creation without a token | Yes (start without `GAMBOT_TOKEN`) | Yes: `https://gambot-mcp.azurewebsites.net/mcp/onboarding` (no auth, onboarding tools only) |
+| Account creation without a token | Yes (start without `GAMBOT_TOKEN`) | Yes: `https://mcp.gambot.co.il/mcp/onboarding` (no auth, onboarding tools only) |
 
 Only claim support a client really has. If a client has no MCP support, use the REST API ([rest-api.md](rest-api.md)).
 
@@ -18,7 +18,7 @@ Only claim support a client really has. If a client has no MCP support, use the 
 # local
 claude mcp add gambot -e GAMBOT_TOKEN=$GAMBOT_TOKEN -- npx -y gambot-mcp
 # hosted (OAuth)
-claude mcp add --transport http gambot https://gambot-mcp.azurewebsites.net/mcp
+claude mcp add --transport http gambot https://mcp.gambot.co.il/mcp
 ```
 Then run `/mcp` in Claude Code to authenticate the hosted server.
 
@@ -34,7 +34,7 @@ Then run `/mcp` in Claude Code to authenticate the hosted server.
   }
 }
 ```
-Files: Claude Desktop `claude_desktop_config.json`; Cursor `.cursor/mcp.json` or `~/.cursor/mcp.json`; Windsurf `~/.codeium/windsurf/mcp_config.json`; Gemini CLI `~/.gemini/settings.json`. For remote servers Cursor accepts `{ "url": "https://gambot-mcp.azurewebsites.net/mcp" }`.
+Files: Claude Desktop `claude_desktop_config.json`; Cursor `.cursor/mcp.json` or `~/.cursor/mcp.json`; Windsurf `~/.codeium/windsurf/mcp_config.json`; Gemini CLI `~/.gemini/settings.json`. For remote servers Cursor accepts `{ "url": "https://mcp.gambot.co.il/mcp" }`.
 
 **OpenAI Codex CLI** (`~/.codex/config.toml`)
 ```toml
@@ -48,12 +48,12 @@ env = { GAMBOT_TOKEN = "gmbt_your_token_here" }
 ```json
 {
   "servers": {
-    "gambot": { "type": "http", "url": "https://gambot-mcp.azurewebsites.net/mcp" }
+    "gambot": { "type": "http", "url": "https://mcp.gambot.co.il/mcp" }
   }
 }
 ```
 
-**ChatGPT** — add a custom connector (developer mode) pointing at `https://gambot-mcp.azurewebsites.net/mcp` and sign in with OAuth.
+**ChatGPT** — add a custom connector (developer mode) pointing at `https://mcp.gambot.co.il/mcp` and sign in with OAuth.
 
 Client UIs change; if a path above has moved, check that client's current MCP documentation. Replace `gmbt_your_token_here` with a reference to a secret, never a real token committed to a repo.
 
@@ -71,6 +71,7 @@ Client UIs change; if a path above has moved, check that client's current MCP do
 | Send template | `gambot_list_templates` → `gambot_get_template_variables` → `gambot_send_template` |
 | Did it arrive? | `gambot_get_message_status` |
 | Read a chat | `gambot_get_conversation_messages` |
+| Download an image / file / voice note from a message or webhook | `gambot_get_media_url` (`mediaId`, or `metaMediaId` + `from`) |
 | Sender numbers | `gambot_list_numbers` |
 | Create a template | `gambot_create_template` |
 | Webhooks | `gambot_register_webhook`, `gambot_get_webhook`, `gambot_test_webhook` |

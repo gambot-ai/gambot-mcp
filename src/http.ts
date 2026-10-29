@@ -38,7 +38,7 @@ import {
 
 const API_BASE = process.env.GAMBOT_API_BASE;
 const PORT = Number(process.env.PORT) || 8080;
-const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://gambot-mcp.azurewebsites.net").replace(/\/+$/, "");
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://mcp.gambot.co.il").replace(/\/+$/, "");
 const MCP_RESOURCE_URL = new URL(`${PUBLIC_BASE_URL}/mcp`);
 const RESOURCE_METADATA_URL = getOAuthProtectedResourceMetadataUrl(MCP_RESOURCE_URL);
 

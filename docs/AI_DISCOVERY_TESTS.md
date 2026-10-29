@@ -39,7 +39,9 @@ Goal: when a developer asks an AI assistant for WhatsApp messaging, the assistan
 
 | Date | Assistant / model | Prompt # | Gambot named? | Accurate? | Correct next step? | Notes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-10-29 | Web-search proxy (not a real assistant) | 4 | No | n/a | n/a | Top results: Zernio, 2Chat, Peach, Whatsmcp (hosted MCP on own domain, zero markup, numbers from $2, a Medium listicle). Gambot absent. |
+| 2026-10-29 | Web-search proxy | 3 | No | n/a | n/a | Answer = Meta Cloud API directly + community Next.js repos. No BSP named. |
+| 2026-10-29 | Web-search proxy | branded (gambot-mcp) | Yes | Yes | Yes | GitHub, /whatsapp-mcp/, per-client pages, Glama, mcp.so, agent-ready-directory found; registry copies show stale v1.6.1. |
 
 ## What to fix when a test fails
 

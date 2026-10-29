@@ -101,7 +101,7 @@ export async function buildSetupReport(
               "companyInfo.companyIdNumber (tax / company id)",
               "companyInfo.country (ISO-3166 alpha-2)",
               "contactInfo.contactFullName / contactEmail / contactPhoneNumber",
-              "number option: useFreeNumber (testing), useCoexisting, or their own number in simInfo.simNumberEntered",
+              "number option: useCoexisting, or their own number in simInfo.simNumberEntered",
             ],
             note:
               "If the user ALREADY has a Gambot account: do not create another. Ask for their API token (Settings → General) and set GAMBOT_TOKEN, or connect the hosted MCP with OAuth.",
@@ -180,7 +180,7 @@ export async function buildSetupReport(
       next_action: {
         actor: "human",
         instructions:
-          "Open Gambot → Settings → General and copy the API token (starts with gmbt_). Then EITHER set GAMBOT_TOKEN in the MCP server env and restart it (local), OR connect the hosted MCP https://gambot-mcp.azurewebsites.net/mcp and paste the token on the OAuth consent page. Never paste the token into the chat.",
+          "Open Gambot → Settings → General and copy the API token (starts with gmbt_). Then EITHER set GAMBOT_TOKEN in the MCP server env and restart it (local), OR connect the hosted MCP https://mcp.gambot.co.il/mcp and paste the token on the OAuth consent page. Never paste the token into the chat.",
         url: "https://app.gambot.co.il/settings",
         then: "After reconnecting, call gambot_setup_whatsapp_integration again — it will run the full readiness checks.",
       },

@@ -20,7 +20,7 @@ Step 2 cannot be done by an agent. Meta requires the business owner to authorize
 
 Ask the user for: company name, company/tax id, country (ISO-3166 alpha-2), timezone (IANA, if known), and a contact (full name, email, phone). Then choose the WhatsApp number path *with the user* (never guess):
 
-- **Free test number** (`useFreeNumber`): fastest way to try the API. Meta test number, limited use.
+- Gambot provides **no free / test / sandbox numbers** — never offer one. The options are: coexistence (existing WhatsApp Business number), the customer's own number, or a **prepaid** number bought through the paid account (no trial for the number or the subscription).
 - **Coexistence** (`useCoexisting`): keep using the existing WhatsApp Business app number alongside the API (`simInfo.simNumberEntered`).
 - **Bring your own number** (`simInfo.simNumberEntered`).
 - **Buy a number** (`simInfo.purchaseInTwilio=true` + `selectedSimNumber`): costs money and requires email/WhatsApp verification first (`gambot_search_available_numbers` → `gambot_send_onboarding_verification` → `gambot_verify_onboarding_code`).
