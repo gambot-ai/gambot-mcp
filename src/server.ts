@@ -3,7 +3,7 @@ import { GambotClient, GambotApiError } from "./client.js";
 import { TOOLS, PUBLIC_ONBOARDING_TOOLS } from "./tools.js";
 
 /** Keep in sync with package.json (checked by test/recovery.test.js). */
-export const SERVER_VERSION = "1.10.0";
+export const SERVER_VERSION = "1.11.0";
 
 /**
  * Build an MCP server instance wired to a specific {@link GambotClient}.
@@ -194,6 +194,11 @@ BUILDING BOTS & AUTOMATIONS (creating or upgrading chat bots):
     "Gambot AI") instead of / after the SendMessage; (e) free-text SendMessage only delivers inside the 24h window —
     inside a button flow that is satisfied because the contact just tapped; (f) "back to menu" = SendMessage of the
     main template, not a new botomation.
+- CATALOG (products / services; used by quotes, bots, the public catalog page): read gambot_list_catalog / gambot_get_catalog_item, change with
+  gambot_upsert_catalog_items (many at once; matched by id, SKU, else name) / gambot_update_catalog_item / gambot_delete_catalog_item; stock by SKU with
+  gambot_adjust_catalog_stock. WEBSITE SCAN: gambot_set_catalog_website_scan stores the shop URL + what to add/update/remove + the schedule
+  (daily/weekly/monthly + time), gambot_run_catalog_website_scan scans now, gambot_get_catalog_website_scan shows the settings and last result
+  (WooCommerce / Shopify shops). Confirm with the user before enabling syncRemove / syncMode 'replace' (they delete catalog items).
 - GAMBOT AI (the AI answerer / operator) — it usually ALREADY EXISTS: when an org signs up, Gambot scans its
   website and AUTO-BUILDS a Gambot AI "brain" + a "GAMBOT AI AGENT" botomation (trigger = contactOwner == the
   Gambot AI user), seeded INACTIVE so the owner reviews it first. So when the user wants "an AI bot":

@@ -1164,6 +1164,157 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.patch(`/quotes/${encodeURIComponent(a.quoteId)}`, a.fields),
   },
 
+  // -- Catalog (products / services), stock and website scan ------------------------------------------------
+  {
+    name: "gambot_list_catalog",
+    title: "List catalog items",
+    description:
+      "List the organization's product/service catalog (Catalog Manager). Filter by free-text search (name/SKU/description/category) or exact category. " +
+      "Returns items { id, name, description, unitPrice, sku, category, link, tags, images, customFields, isPublic } + the list of categories. Paginated (limit<=200).",
+    inputSchema: {
+      search: z.string().optional(),
+      category: z.string().optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+      offset: z.number().int().min(0).optional(),
+    },
+    run: (c, a) => c.get("/catalog", { search: a.search, category: a.category, limit: a.limit, offset: a.offset }),
+  },
+  {
+    name: "gambot_get_catalog_item",
+    title: "Get catalog item",
+    description: "One catalog item by id, with its stock (quantity / trackStock / lowStockThreshold) when it has a SKU that is stock-tracked.",
+    inputSchema: { id: z.string().describe("Catalog item id (from gambot_list_catalog).") },
+    run: (c, a) => c.get(`/catalog/${encodeURIComponent(a.id)}`),
+  },
+  {
+    name: "gambot_upsert_catalog_items",
+    title: "Create / update catalog items",
+    description:
+      "Create or update catalog items - one or many (max 200 per call). An item is matched by id, else by SKU, else by exact name (only when no SKU is given); " +
+      "no match = a new item is created (name required). Only the fields you send change on an existing item (customFields are merged key by key). " +
+      "Fields: name, description, unitPrice (number), sku, category, link (product page URL), tags[], images[] (http/https URLs), customFields{}, isPublic (shown on the public catalog page; default true). " +
+      "Use it for price changes, new products, category fixes. Stock quantities are NOT set here - use gambot_adjust_catalog_stock.",
+    inputSchema: {
+      items: z
+        .array(
+          z.object({
+            id: z.string().optional(),
+            name: z.string().optional(),
+            description: z.string().optional(),
+            unitPrice: z.number().min(0).optional(),
+            sku: z.string().optional(),
+            category: z.string().optional(),
+            link: z.string().optional(),
+            tags: z.array(z.string()).optional(),
+            images: z.array(z.string()).optional(),
+            customFields: z.record(z.any()).optional(),
+            isPublic: z.boolean().optional(),
+          })
+        )
+        .min(1)
+        .max(200),
+    },
+    run: (c, a) => c.post("/catalog", { items: a.items }),
+  },
+  {
+    name: "gambot_update_catalog_item",
+    title: "Update one catalog item",
+    description: "Partial update of ONE catalog item by id (only the fields you send change). Same fields as gambot_upsert_catalog_items.",
+    inputSchema: {
+      id: z.string(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      unitPrice: z.number().min(0).optional(),
+      sku: z.string().optional(),
+      category: z.string().optional(),
+      link: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      images: z.array(z.string()).optional(),
+      customFields: z.record(z.any()).optional(),
+      isPublic: z.boolean().optional(),
+    },
+    run: (c, a) => {
+      const { id, ...rest } = a as Record<string, unknown>;
+      return c.patch(`/catalog/${encodeURIComponent(String(id))}`, rest);
+    },
+  },
+  {
+    name: "gambot_delete_catalog_item",
+    title: "Delete catalog item",
+    description:
+      "Remove an item from the catalog by id. Its inventory row (if any) is kept. Confirm with the user first. " +
+      "Note: if the catalog is synced from a website with syncRemove, deleted-by-mistake items come back on the next scan only when they still exist on the site.",
+    inputSchema: { id: z.string() },
+    run: (c, a) => c.del(`/catalog/${encodeURIComponent(a.id)}`),
+  },
+  {
+    name: "gambot_adjust_catalog_stock",
+    title: "Adjust stock of a SKU",
+    description:
+      "Change the stock quantity of a SKU atomically (logged as a stock movement; low-stock triggers and WooCommerce/Shopify push run after). " +
+      "mode 'delta' adds quantity (negative = decrease; refused if it would go below zero), mode 'set' overwrites it. A SKU with no inventory row yet gets one with stock tracking ON.",
+    inputSchema: {
+      sku: z.string(),
+      mode: z.enum(["delta", "set"]).default("delta"),
+      quantity: z.number().int(),
+      note: z.string().optional(),
+    },
+    run: (c, a) => c.post("/catalog/stock", { sku: a.sku, mode: a.mode, quantity: a.quantity, note: a.note }),
+  },
+  {
+    name: "gambot_get_catalog_website_scan",
+    title: "Get catalog website-scan settings",
+    description:
+      "The saved website scan of the catalog (the shop URL, what it adds / updates / removes, the schedule and the result of the last run: lastStatus, lastMessage, lastAdded/Updated/Removed). " +
+      "configured=false when none is set up yet.",
+    inputSchema: {},
+    run: (c) => c.get("/catalog/sync"),
+  },
+  {
+    name: "gambot_set_catalog_website_scan",
+    title: "Set up / schedule the catalog website scan",
+    description:
+      "Define the catalog's WEBSITE SCAN and its SCHEDULE. Gambot reads the whole product list of a WooCommerce or Shopify shop at `url` and keeps the catalog in line with it. " +
+      "Partial update: fields you omit keep their saved value. " +
+      "enabled=true schedules it (frequency daily|weekly|monthly, time 'HH:mm' in `timezone` [default Asia/Jerusalem], dayOfWeek 0-6 with Sunday=0 for weekly, dayOfMonth 1-31 for monthly); " +
+      "enabled=false only stores the settings (use with gambot_run_catalog_website_scan for a one-time scan). " +
+      "What a scan does: syncAdd = add products that are new on the site, syncUpdate = refresh name/description/SKU/category/price/images of matched items, syncRemove = remove items that came from this site and no longer exist there " +
+      "(only after a COMPLETE read; never removes your manual items). syncMode 'merge' (default) or 'replace' (the catalog becomes exactly the site's list - removes manual items too: ask the user to confirm before using it). " +
+      "Sites that are not WooCommerce/Shopify can't be scanned this way.",
+    inputSchema: {
+      url: z.string().optional().describe("Shop / site URL, https://..."),
+      enabled: z.boolean().optional(),
+      frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
+      time: z.string().optional().describe("HH:mm, 24h"),
+      dayOfWeek: z.number().int().min(0).max(6).optional(),
+      dayOfMonth: z.number().int().min(1).max(31).optional(),
+      timezone: z.string().optional(),
+      syncAdd: z.boolean().optional(),
+      syncUpdate: z.boolean().optional(),
+      syncRemove: z.boolean().optional(),
+      syncMode: z.enum(["merge", "replace"]).optional(),
+    },
+    run: (c, a) => c.put("/catalog/sync", a),
+  },
+  {
+    name: "gambot_run_catalog_website_scan",
+    title: "Scan the website now",
+    description:
+      "Run the saved catalog website scan right now (background job - a big shop can take minutes). Poll gambot_get_catalog_website_scan for lastStatus / lastMessage. " +
+      "Needs settings saved first (gambot_set_catalog_website_scan, enabled=false is fine). Applies the saved add / update / remove choices to the live catalog, so confirm with the user if syncRemove or replace is on.",
+    inputSchema: {},
+    run: (c) => c.post("/catalog/sync/run", {}),
+  },
+  {
+    name: "gambot_scan_catalog_product_pages",
+    title: "Scan catalog product pages (extra scan)",
+    description:
+      "'Extra scan': reads each catalog item's own product page (its `link`) for add-ons, delivery & installation, dimensions, plus whatever the prompt asks for " +
+      "(e.g. 'warranty period and available colors'). Saved on the items and reused by later syncs. Background job. Items without a link are skipped.",
+    inputSchema: { prompt: z.string().optional().describe("Extra things to bring from each product page; empty = the built-in extras only.") },
+    run: (c, a) => c.post("/catalog/scan-pages", { prompt: a.prompt ?? "" }),
+  },
+
   // â”€â”€ Invoices (×—×©×‘×•× ×™×•×ª) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   {
     name: "gambot_create_invoice",
