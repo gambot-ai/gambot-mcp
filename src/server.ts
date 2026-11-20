@@ -3,7 +3,7 @@ import { GambotClient, GambotApiError } from "./client.js";
 import { TOOLS, PUBLIC_ONBOARDING_TOOLS } from "./tools.js";
 
 /** Keep in sync with package.json (checked by test/recovery.test.js). */
-export const SERVER_VERSION = "1.9.1";
+export const SERVER_VERSION = "1.10.0";
 
 /**
  * Build an MCP server instance wired to a specific {@link GambotClient}.
@@ -205,8 +205,29 @@ BUILDING BOTS & AUTOMATIONS (creating or upgrading chat bots):
      gambot_list_ai → gambot_get_ai → gambot_update_ai; (b) the BOTOMATION (when/flow) via PATCH bots/{id} to apply
      the upgraded defaults above (context check, reminders, reply-matching, human-intervention cancel).
   4) Only if NONE exists, build one — gambot_create_ai for the brain (then finish wiring in the Bot Builder app).
+  KNOWLEDGE edits (the safe way): Q&A pairs -> gambot_get_ai_qna (read exact questions) then gambot_upsert_ai_qna (add/update a few, others
+     untouched) / gambot_delete_ai_qna; GENERAL KNOWLEDGE text ("מידע כללי") -> gambot_get_ai_knowledge then gambot_set_ai_knowledge (replaces the
+     whole text, so read + merge first; the old version is archived). gambot_update_ai.qnAPairs replaces the entire Q&A list - avoid it for small edits.
+  AI ANSWERER BOTOMATION = a step with action "GambotAi" (config below). Best practice: do NOT write it from scratch - gambot_get_bot on the existing
+     'gambot_ai' botomation, change config keys, send it back with gambot_update_bot. Creating a new one with gambot_create_bot is fine too:
+     trigger Step_1 = IncomingMessage with a contactOwner == "Gambot AI" condition (copy the existing one), Step_2 = { type:"action", action:"GambotAi", config:{...} }.
+     GambotAi config keys (all optional unless noted; leave out what you don't need):
+     - selectedGambotAi (REQUIRED) = the brain id from gambot_list_ai; botInstructions / botRestrictions = extra rules for THIS bot on top of the brain.
+     - activismMode: 'full_active' (default, proactive) | 'semi' (answers + minimal next step) | 'answer_only'. aiModel; aiAutoCheapForSmallTalk (bool).
+     - doNotRespondWhen (text condition), resumeAfterValue + resumeAfterUnit ('minutes'|'hours'|'days') / resumeWhenText (come back after a human stops), stopOnBot (bool).
+     - defaultMessageRestrictedTopic / defaultMessageOutOfKnowledge / defaultMessageUnsupportedMedia; handoffAckEnabled (false = no 'passing you to a human' message) + handoffAckMessage.
+     - HAND-OFF TO A HUMAN (default escalation): defaultEscalationTeam = [{ email, name?, transferOwnership?:true, emailNotification?:true }];
+       escalationRoutingMode: 'all' | 'round_robin' | 'prompt_based' (+ escalationRoutingPrompt, who gets which case) ; escalationBehaviorPrompt (when to hand off);
+       handoffNotifyChannels = ['email','push']; handoffRoutingRules = [{ keywords:[..], recipients:[{ email|userId, name? }] }] (first matching keywords win over the team);
+       handoffTask = { enabled:true, dueMode:'ai'|'relative'|'manual', relAmount, relUnit, dueDate, calendar:'none'|'internal'|'external' } - opens a TASK for the agent on every
+       hand-off ('ai' = the AI picks the due time from the conversation, recommended; 'relative' = from now; 'manual' = fixed dueDate; calendar 'internal' shows it in the Gambot calendar,
+       'external' also in the connected Google/Microsoft calendar).
+     - conversationGoals = [{ title, description }] + goalsCompletionMode, endConditionPrompt, maxMessages, maxDuration; questionnaireEnabled + questionnaireQuestions.
+     - enableSchedulingFeatures (appointment booking; needs connectionId = the connected calendar), enableQuoteGeneration, enableEmailSending (+ emailSendingInstructions),
+       dbAccessEnabled (+ dbAccessTables), aiSendableTemplates / aiSendableMessages / aiSendableMedia (what the AI may send), enableWhatsAppReminder / follow-up reminders, enableProActive (+ proActiveSteps...).
+     If you are unsure of a key's exact shape, read it from an existing GambotAi step (gambot_get_bot) or the Bot Builder app - never invent shapes for the complex keys.
   NOTE: the AI brain's TEXT config is fully editable over the API (gambot_*_ai); only knowledge-base FILE upload is
-  done in the Bot Builder app. deploy-package builds only 'menu'/'keyword' main bots (each with its activator +
+     done in the Bot Builder app. deploy-package builds only 'menu'/'keyword' main bots (each with its activator +
   human-intervention cancel), not the AI answerer botomation itself.
 
 EMAIL (templates, test, campaigns) - everything the web app's Email section can do:
@@ -382,6 +403,11 @@ const RECOVERY: Record<string, { tool?: string; reason: string; humanOnly?: bool
     humanOnly: true,
     reason:
       "The Gambot token is missing or invalid. Run gambot_setup_whatsapp_integration to see the exact state. The user should copy a valid gmbt_ token (Gambot → Settings → General) into GAMBOT_TOKEN, or connect the hosted MCP with OAuth. Never ask the user to paste the token into the chat.",
+  },
+  ACCOUNT_NOT_ACTIVE: {
+    humanOnly: true,
+    reason:
+      "This Gambot account is not active (trial ended, suspended, or cancelled), so every API/MCP call is refused until it is fixed. Do NOT retry. Tell the user exactly this, and if data.paymentUrl is present give them that link to add a payment method (data.action = add_payment_method); otherwise tell them to contact Gambot support. The Gambot token itself is valid.",
   },
   API_DISABLED: {
     humanOnly: true,

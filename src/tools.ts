@@ -99,7 +99,11 @@ export const TOOLS: GambotTool[] = [
     description:
       "Check whether a message you sent was delivered. Pass the messageId returned by gambot_send_text / gambot_send_template (or per recipient from a campaign send) and, for a fast exact lookup, the recipient's phone. " +
       "Returns { messageId, phone, status (sent|delivered|read|failed), time, errorMessage? }. Use it as the final step of 'send a first test message' and whenever a user says 'I don't see the message arrived'. " +
-      "If status=failed with Meta error 131042 the response carries a paymentIssue block: the WhatsApp Business API payment method is SEPARATE from the Meta Ads one â€” tell the user to add one in Meta Business Settings â–¸ Billing.",
+      "WHY it failed: when status=failed (or an error is present) the response carries `failureInfo` { metaCode, summary, retryable, whatToDo, marketingRelated, serviceAlternative? } - " +
+      "a plain-language explanation of the Meta error. For marketing-limit failures (131049 / 130472 / 131050) serviceAlternative.applies=true means the template is MARKETING: " +
+      "tell the user it is a marketing-policy block (not a bug), that retrying the same marketing template will usually fail again, and offer to create a SERVICE (UTILITY) " +
+      "template for the transactional part of the message (see serviceAlternative.guide / gambot_template_category_guide), or send free text if the 24h window is open. " +
+      "If status=failed with Meta error 131042 the response also carries a paymentIssue block: the WhatsApp Business API payment method is SEPARATE from the Meta Ads one â€” tell the user to add one in Meta Business Settings â–¸ Billing.",
     inputSchema: {
       messageId: z.string().describe("The message id (wamidâ€¦) returned when the message was sent."),
       phone: z.string().optional().describe("Recipient phone (E.164) â€” recommended for a fast exact lookup."),
@@ -350,6 +354,17 @@ export const TOOLS: GambotTool[] = [
     run: (c) => c.get("/templates"),
   },
   {
+    name: "gambot_template_category_guide",
+    title: "Service (UTILITY) vs Marketing template guide",
+    description:
+      "Explains the difference between SERVICE (UTILITY) and MARKETING WhatsApp templates and how Meta decides: what makes a template qualify as UTILITY, " +
+      "what makes Meta re-label it as MARKETING, why UTILITY is cheaper and less error-prone (marketing templates can fail with 131049 'healthy ecosystem' / " +
+      "130472 'experiment' limits), concrete rewrite tips and generic service-template examples. Call it BEFORE gambot_create_template when the user wants a " +
+      "UTILITY template, and whenever gambot_get_message_status returns failureInfo.serviceAlternative.applies=true.",
+    inputSchema: {},
+    run: (c) => c.get("/templates/category-guide"),
+  },
+  {
     name: "gambot_get_template",
     title: "Get template",
     description: "Get a single template by id, including Meta approval status.",
@@ -404,7 +419,17 @@ export const TOOLS: GambotTool[] = [
       "(3) MARKETING / BROADCAST (×“×™×•×•×¨): use category 'MARKETING' for any promotional broadcast. Its opt-out FOOTER is MANDATORY and " +
       "OWNED by Gambot â€” DO NOT add your own FOOTER for MARKETING; Gambot adds a localized opt-out footer (Hebrew '×œ×”×¡×¨×” ×™×© ×œ×”×©×™×‘ ×”×¡×¨', " +
       "else 'Reply STOP to unsubscribe') and OVERRIDES any non-opt-out footer you passed. An existing opt-out footer or a '×”×¡×¨'/'STOP' " +
-      "QUICK_REPLY button is respected. " +
+      "QUICK_REPLY button is respected (no footer added). " +
+      "BUT an opt-out QUICK_REPLY button does NOT unsubscribe anyone by itself - tapping it does nothing unless a bot handles the click. " +
+      "When your template has one, the response carries `optOutButtonNotice` (actionRequired): you MUST then create a bot with gambot_create_bot " +
+      "(trigger = that template's button click -> switchCase on {{Step_1_ButtonText}} -> GambotAction setConsent consentValue=false -> confirmation message); " +
+      "gambot_create_template_button_autoreply only sends a reply and does NOT change consent. Tell the user you did it. " +
+      "(4) SERVICE vs MARKETING: category 'UTILITY' (service) = a message about something the customer already did/asked (order, booking, " +
+      "payment, delivery, reminder of their appointment) - cheaper and far less likely to hit Meta marketing limits (errors 131049/130472) " +
+      "than MARKETING (promotion, offers, win-back, 'come back'). Meta - not us - decides the final category by CONTENT and often re-labels a " +
+      "UTILITY template that sounds promotional as MARKETING (~4 in 10 in our data). The response carries `categoryGuidance` (what Meta looks for, " +
+      "an AI estimate of the chance this draft is approved as UTILITY, and a warning when it is likely to be re-categorized). READ IT and tell the user; " +
+      "if the content is truly promotional, create it as MARKETING instead of looping on rewrites. Full rules: gambot_template_category_guide. " +
       "The new template starts as PENDING (awaiting Meta approval). You do NOT have to wait for approval to SCHEDULE with it: you can " +
       "immediately call gambot_create_campaign with campaignTrigger='Scheduled' and this template's id â€” it just has to be APPROVED before the scheduled runAt.",
     inputSchema: {
@@ -2218,10 +2243,25 @@ export const TOOLS: GambotTool[] = [
       escalateToHuman: z.boolean().optional().describe("Hand off to a human agent when the AI can't help."),
       handleMultipleLanguages: z.boolean().optional().describe("Answer in the customer's language."),
       personalizedResponses: z.boolean().optional().describe("Personalize replies using contact/CRM context."),
+      botDescription: z.string().optional().describe("Short description of the AI."),
+      customBotTone: z.string().optional().describe("Custom tone text (when botTone is 'custom')."),
+      quickReplies: z.boolean().optional().describe("Offer quick-reply buttons."),
+      defaultMessageRestrictedTopic: z.string().optional().describe("Reply when the customer asks about a restricted / out-of-scope topic."),
+      defaultMessageOutOfKnowledge: z.string().optional().describe("Reply when the AI has no information to answer."),
       qnAPairs: z
-        .array(z.object({ question: z.string(), answer: z.string() }))
+        .array(
+          z.object({
+            question: z.string(),
+            answer: z.string(),
+            tags: z.array(z.string()).optional(),
+            answerMode: z.enum(["ai_generated", "exact"]).optional(),
+          })
+        )
         .optional()
-        .describe("Knowledge Q&A pairs (REPLACES the live set â€” send the full list you want)."),
+        .describe(
+          "Knowledge Q&A pairs - REPLACES the whole live set (anything you omit is deleted). To add/change/remove a few pairs " +
+            "use gambot_upsert_ai_qna / gambot_delete_ai_qna instead. Pairs whose question already exists keep their tags/answerMode unless you send them."
+        ),
     },
     run: (c, a) => {
       const { id, ...rest } = a as Record<string, unknown>;
@@ -2247,6 +2287,70 @@ export const TOOLS: GambotTool[] = [
       qnAPairs: z.array(z.object({ question: z.string(), answer: z.string() })).optional().describe("Initial knowledge Q&A pairs."),
     },
     run: (c, a) => c.post("/ai", a),
+  },
+  {
+    name: "gambot_get_ai_qna",
+    title: "List Gambot AI Q&A pairs",
+    description:
+      "List ALL live Q&A pairs of a Gambot AI brain with their tags, answerMode ('ai_generated' = the AI phrases the reply from the answer, " +
+      "'exact' = the answer is sent verbatim), source and status. Call this before editing so you use the exact existing questions.",
+    inputSchema: { id: z.string().describe("The Gambot AI model id (from gambot_list_ai).") },
+    run: (c, a) => c.get(`/ai/${encodeURIComponent(String(a.id))}/qna`),
+  },
+  {
+    name: "gambot_upsert_ai_qna",
+    title: "Add / update Gambot AI Q&A pairs",
+    description:
+      "Add new Q&A pairs or update existing ones WITHOUT touching the rest (the safe way to edit knowledge). A pair is matched by its question " +
+      "(case-insensitive): same question → its answer/tags/answerMode are updated in place; new question → appended and live immediately. " +
+      "Put alternative phrasings in one question separated by ' | ' (e.g. 'מה המחיר? | כמה זה עולה?'). Max 200 per call.",
+    inputSchema: {
+      id: z.string().describe("The Gambot AI model id (from gambot_list_ai)."),
+      items: z
+        .array(
+          z.object({
+            question: z.string().describe("The question (use ' | ' between alternative phrasings)."),
+            answer: z.string().describe("The answer / the facts the AI should rely on."),
+            tags: z.array(z.string()).optional().describe("Optional topic tags (kept as-is when omitted on an update)."),
+            answerMode: z.enum(["ai_generated", "exact"]).optional().describe("Default 'ai_generated'. Use 'exact' only for fixed wording (legal text, bank details…)."),
+          })
+        )
+        .min(1)
+        .max(200),
+    },
+    run: (c, a) => c.post(`/ai/${encodeURIComponent(String(a.id))}/qna`, { items: a.items }),
+  },
+  {
+    name: "gambot_delete_ai_qna",
+    title: "Delete Gambot AI Q&A pairs",
+    description: "Delete Q&A pairs by their exact question (case-insensitive). Get the questions from gambot_get_ai_qna first.",
+    inputSchema: {
+      id: z.string().describe("The Gambot AI model id (from gambot_list_ai)."),
+      questions: z.array(z.string()).min(1).describe("Questions to remove."),
+    },
+    run: (c, a) => c.post(`/ai/${encodeURIComponent(String(a.id))}/qna/delete`, { questions: a.questions }),
+  },
+  {
+    name: "gambot_get_ai_knowledge",
+    title: "Get Gambot AI general knowledge",
+    description:
+      "Read the AI brain's GENERAL KNOWLEDGE text ('מידע כללי' — who the business is, what it offers, prices, policies…). Returns the text, " +
+      "where it came from (typed text or an uploaded file) and its version history. Read it before rewriting so you don't drop existing facts.",
+    inputSchema: { id: z.string().describe("The Gambot AI model id (from gambot_list_ai).") },
+    run: (c, a) => c.get(`/ai/${encodeURIComponent(String(a.id))}/knowledge`),
+  },
+  {
+    name: "gambot_set_ai_knowledge",
+    title: "Set Gambot AI general knowledge",
+    description:
+      "REPLACE the AI brain's general-knowledge text ('מידע כללי') with the text you send (send the FULL text — read it first with " +
+      "gambot_get_ai_knowledge and merge your changes). The previous version is archived and can be restored in the app. " +
+      "Use this for long free-form business info; use gambot_upsert_ai_qna for discrete question→answer facts.",
+    inputSchema: {
+      id: z.string().describe("The Gambot AI model id (from gambot_list_ai)."),
+      text: z.string().min(1).describe("The full general-knowledge text."),
+    },
+    run: (c, a) => c.post(`/ai/${encodeURIComponent(String(a.id))}/knowledge`, { text: a.text }),
   },
 
   // â”€â”€ Onboarding (create account / payment / connect WhatsApp) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2344,13 +2448,20 @@ export const TOOLS: GambotTool[] = [
     description:
       "Verify a card with the clearing provider (Tranzila) and save its token to an organization, so an AI agent with the customer's card can put a " +
       "payment method on file without the hosted page. The raw card is sent only to the PCI-compliant clearing provider and never stored. " +
-      "For a hosted alternative (customer types the card), use gambot_create_payment_link.",
+      "For a hosted alternative (customer types the card), use gambot_create_payment_link. " +
+      "IMPORTANT — for an organization that is still on a FREE TRIAL, saving a card here STARTS THE PAID PLAN: the trial caps (300 broadcast messages, trial AI-reply and email caps) are lifted immediately, " +
+      "the account becomes active and the FIRST CHARGE is scheduled for TOMORROW. Confirm with the customer before calling. The response field paidPlanStarted=true tells you this happened. " +
+      "Pass startPaidPlan=false only to store the card WITHOUT converting (the trial and its caps continue). For an already-paying organization this only updates the card; nothing else changes.",
     inputSchema: {
       organizationName: z.string(),
       plan: z.string().optional(),
       card: z
         .record(z.any())
         .describe("REQUIRED. { cardNumber, expirationDate (\"MM/YY\"), cvv?, holderId? }."),
+      startPaidPlan: z
+        .boolean()
+        .optional()
+        .describe("Default true. For a TRIAL org, true = saving the card starts the paid plan (caps lifted, first charge tomorrow). false = save the card only, stay on trial."),
     },
     run: (c, a) => c.post("/onboarding/add-payment-method", a),
   },
@@ -2359,9 +2470,15 @@ export const TOOLS: GambotTool[] = [
     title: "Create payment link",
     description:
       "ONBOARDING ONLY â€” build a hosted link where a NEW Gambot customer saves a card on file for their Gambot subscription. Card data is never handled by the API â€” share the URL; the card token is saved on success. " +
-      "NOT for charging an organization's own customers â€” for that use gambot_create_clearing_payment_link.",
+      "NOT for charging an organization's own customers â€” for that use gambot_create_clearing_payment_link. " +
+      "IMPORTANT — if the organization is still on a FREE TRIAL, the link is a 'Start paid plan' step: once the customer saves the card the paid plan starts (trial caps lifted, account active, FIRST CHARGE scheduled for TOMORROW). " +
+      "Tell the customer this before sharing the link. Pass startPaidPlan=false to only store the card and stay on trial. For an already-paying organization the link just updates the card.",
     inputSchema: {
       organizationName: z.string(),
+      startPaidPlan: z
+        .boolean()
+        .optional()
+        .describe("Default true. For a TRIAL org, true = the hosted card page starts the paid plan after the card is saved (first charge tomorrow). false = card only, stay on trial."),
       plan: z.string().optional(),
       price: z.union([z.string(), z.number()]).optional(),
       paymentCycle: z.string().optional().describe("monthly / yearly."),
