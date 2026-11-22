@@ -3,7 +3,7 @@ import { GambotClient, GambotApiError } from "./client.js";
 import { TOOLS, PUBLIC_ONBOARDING_TOOLS } from "./tools.js";
 
 /** Keep in sync with package.json (checked by test/recovery.test.js). */
-export const SERVER_VERSION = "1.11.0";
+export const SERVER_VERSION = "1.12.0";
 
 /**
  * Build an MCP server instance wired to a specific {@link GambotClient}.
@@ -115,6 +115,9 @@ BUILDING BOTS & AUTOMATIONS (creating or upgrading chat bots):
   (ביטול בוט בהתערבות אנושית — stops the bot the instant a human agent replies). Build all three in ONE call with
   gambot_deploy_bot_package (preferred for "create a bot"); toggle the whole package with
   gambot_set_bot_status(includePackage=true); inspect it with gambot_get_bot_package.
+- RUN a webhook-triggered automation (a user asks to "trigger / fire / run the webhook automation"): gambot_list_webhook_bots to get the
+  exact webhookName, then gambot_run_webhook_bot with the payload. NEVER POST to the webhook URL yourself (your sandbox may block outbound
+  calls / need site permissions) - these tools go through Gambot's API and work without any network permission.
 - ALWAYS keep the human-intervention cancel (includeHumanInterventionCancel defaults true). Never disable it — it
   is what prevents the bot from talking over a human who stepped into the chat.
 - TEMPLATE + BUTTONS → a DIFFERENT auto-reply per button: use gambot_create_template_button_autoreply (react to a

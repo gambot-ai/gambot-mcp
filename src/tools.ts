@@ -2102,6 +2102,32 @@ export const TOOLS: GambotTool[] = [
     run: (c, a) => c.get(`/bots/${encodeURIComponent(a.botId)}/package`),
   },
   {
+    name: "gambot_list_webhook_bots",
+    title: "List webhook-triggered automations",
+    description:
+      "List the botomations that START from a webhook trigger (what an external system POSTs to). Each item has webhookName " +
+      "(the value to pass to gambot_run_webhook_bot), name, status (active|inactive) and expectedPayload (the sample fields the trigger expects). " +
+      "Call this FIRST - never guess a webhookName.",
+    inputSchema: {},
+    run: (c) => c.get("/bots/webhooks"),
+  },
+  {
+    name: "gambot_run_webhook_bot",
+    title: "Run a webhook-triggered automation",
+    description:
+      "Run a webhook-triggered botomation NOW, as if an external system had POSTed to its webhook URL - but through Gambot's own API, " +
+      "so no outbound call from your sandbox is needed (no site permissions to configure). Pass webhookName (from gambot_list_webhook_bots) " +
+      "and payload (the JSON fields the automation expects - include the contact phone as phone / phoneNumber). " +
+      "Returns { runId, status: 'completed'|'running', response? }: `response` is the automation's own Response output when it defines one; " +
+      "'running' means a long flow continues in the background. Errors: not_found (unknown webhookName), bot_inactive (turn it on with gambot_set_bot_status first). " +
+      "This really executes the automation (it may send WhatsApp messages) - confirm with the user before running it for real contacts.",
+    inputSchema: {
+      webhookName: z.string().describe("The trigger's webhook name, exactly as returned by gambot_list_webhook_bots."),
+      payload: z.record(z.any()).optional().describe("The JSON body to deliver to the automation (its trigger fields). Include the phone number for flows that message the contact."),
+    },
+    run: (c, a) => c.post(`/bots/webhook/${encodeURIComponent(a.webhookName)}/run`, a.payload ?? {}),
+  },
+  {
     name: "gambot_create_keyword_autoreply",
     title: "Create keyword auto-reply bot",
     description:
